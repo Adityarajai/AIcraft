@@ -391,7 +391,8 @@
     function updatePlayer(dt) {
       if(!started||paused||inventoryOpen)return;
       let forward=(keys.w?1:0)-(keys.s?1:0)-joystickVector.y;
-      let strafe=(keys.d?1:0)-(keys.a?1:0)+joystickVector.x;
+      // The camera faces +Z at yaw 0; its screen-right axis is -X.
+      let strafe=(keys.a?1:0)-(keys.d?1:0)-joystickVector.x;
       const length=Math.hypot(forward,strafe);
       if(length>1){forward/=length;strafe/=length}
       const speed=keys.shift?6.4:4.8;
