@@ -1,1 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#101b14">
+  <title>AIcraft — Singleplayer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%235b9f48' d='M2 2h28v28H2z'/%3E%3Cpath fill='%2386c65e' d='M2 2h28v9H2z'/%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme:dark; --white:#f3f3ee; --line:#ffffff44; --panel:#111812eF; --green:#88c76a; --shadow:#0009 }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent }
+    html,body { width:100%; height:100%; margin:0; overflow:hidden; background:#89b8d7; color:var(--white); font-family:Arial,Helvetica,sans-serif; user-select:none; overscroll-behavior:none }
+    body { touch-action:none } #game { position:fixed; inset:0; width:100%; height:100%; display:block; outline:0; touch-action:none }
+    button { color:inherit; font:inherit; cursor:pointer }
+    .top { position:fixed; z-index:3; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:flex-start; padding:14px 17px; pointer-events:none; text-shadow:0 2px 4px #000 }
+    .wordmark { font-weight:900; font-size:19px; letter-spacing:.04em; color:#fff; line-height:1 }
+    .wordmark small { display:block; margin-top:5px; font-size:9px; letter-spacing:.18em; font-weight:700; color:#d1e9bd }
+    .top-right { display:flex; align-items:center; gap:7px; pointer-events:auto }
+    .icon-button { height:38px; min-width:40px; border:1px solid #ffffff66; background:#10181199; border-radius:3px; font-size:17px; box-shadow:0 2px 6px #0005 }
+    .icon-button:hover { background:#334332 }
+    .coordinates { font:11px/1.4 monospace; text-align:right; margin-right:8px; color:#fff }
+    .center-mark { position:fixed; z-index:2; left:50%; top:50%; width:12px; height:12px; transform:translate(-50%,-50%); pointer-events:none; opacity:.9 }
+    .center-mark:before,.center-mark:after { content:""; position:absolute; background:#fff; box-shadow:0 1px 2px #000 }
+    .center-mark:before { width:2px; height:12px; left:5px; top:0 }.center-mark:after { width:12px; height:2px; left:0; top:5px }
+    .tips { position:fixed; z-index:2; top:71px; left:16px; padding:8px 10px; background:#0c130e99; border:1px solid #ffffff36; border-radius:3px; color:#f6f6ec; font:11px/1.65 monospace; text-shadow:0 1px 2px #000; pointer-events:none }
+    .tips b { color:#cfe6bd; font-weight:700 }
+    .bottom { position:fixed; z-index:3; left:50%; bottom:max(16px,env(safe-area-inset-bottom)); transform:translateX(-50%); width:max-content; max-width:calc(100% - 12px); pointer-events:none }
+    .hotbar { display:flex; gap:3px; padding:5px; background:#171a17bb; border:2px solid #10110f; box-shadow:0 3px 8px #0008; pointer-events:auto }
+    .slot { position:relative; width:48px; height:48px; background:#777a728c; border:2px solid #353830; display:grid; place-items:center }
+    .slot.selected { background:#b8baad99; outline:2px solid #fff; outline-offset:0; border-color:#ecebe3; transform:scale(1.08); z-index:1 }
+    .slot-num { position:absolute; top:1px; left:3px; font:10px monospace; color:#fff; text-shadow:1px 1px #222 }
+    .count { position:absolute; right:3px; bottom:1px; font:13px monospace; text-shadow:1px 1px #111,-1px -1px #111; color:white }
+    .cube { width:26px; height:26px; border:1px solid #10130f88; box-shadow:inset -5px -5px #0003,inset 4px 4px #ffffff22; image-rendering:pixelated; transform:rotate(-5deg) }
+    .bar-label { text-align:center; margin-top:7px; color:#fff; font:10px monospace; text-shadow:1px 1px 2px #000 }
+    .toast { position:fixed; z-index:7; left:50%; top:18%; transform:translate(-50%,-8px); padding:9px 14px; border:1px solid #ffffff4a; border-radius:3px; color:white; background:#111812e8; box-shadow:0 3px 12px #0008; font:12px monospace; opacity:0; transition:opacity .14s,transform .14s; pointer-events:none }
+    .toast.show { opacity:1; transform:translate(-50%,0) }
+    .screen { position:fixed; z-index:8; inset:0; display:grid; place-items:center; padding:18px; background:#0008; backdrop-filter:blur(2px) }
+    .screen.hidden { display:none }
+    .card { width:min(490px,100%); padding:28px 28px 23px; border:2px solid #d0d0c8; outline:5px solid #242820; background:linear-gradient(145deg,#292f25f5,#141912f7); box-shadow:0 16px 50px #0009; text-align:center }
+    .card h1 { margin:0; font-size:36px; letter-spacing:.035em; text-shadow:3px 3px #31502b; color:#f5f5e9 }
+    .card .sub { margin:7px 0 20px; font:11px monospace; letter-spacing:.14em; color:#b8c7ac }
+    .card p { color:#d4d7ce; font-size:14px; line-height:1.55; margin:15px auto 19px; max-width:380px }
+    .menu-btn { width:min(330px,100%); min-height:44px; margin:5px auto; display:block; border:2px solid #d9d9d2; outline:2px solid #090c08; border-radius:2px; background:#526b43; font-size:15px; font-weight:700; text-shadow:0 1px #253020 }
+    .menu-btn:hover { background:#688755; filter:brightness(1.12) }
+    .menu-btn.secondary { background:#42483d }.menu-btn.secondary:hover { background:#5a6152 }
+    .fine { margin-top:16px; color:#aab2a2; font:10px/1.5 monospace }
+    .inventory-card { width:min(620px,100%); text-align:left }
+    .inventory-card h2 { margin:0 0 15px; font-size:22px }
+    .inv-layout { display:grid; grid-template-columns:1fr 1fr; gap:18px }
+    .inv-title { margin:0 0 8px; font:11px monospace; color:#ccd5c5; letter-spacing:.08em }
+    .item-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px }
+    .item { min-height:64px; border:1px solid #ffffff45; background:#ffffff12; display:flex; align-items:center; gap:7px; padding:6px; text-align:left; font-size:10px }
+    .item:hover { border-color:#dbeecb; background:#ffffff25 }
+    .item .cube { flex:none; width:23px; height:23px }
+    .item span { line-height:1.2 }.item small { display:block; color:#c4ceb9; margin-top:4px; font:10px monospace }
+    .recipe { width:100%; padding:10px; margin:4px 0; text-align:left; background:#ffffff12; border:1px solid #ffffff3a; font-size:12px }
+    .recipe:disabled { opacity:.4; cursor:not-allowed }
+    .recipe small { display:block; color:#b9c3b0; margin-top:4px; font:10px monospace }
+    .mobile { display:none }
+    .mobile-actions { position:fixed; z-index:4; right:17px; bottom:115px; display:flex; flex-direction:column; gap:9px }
+    .touch-btn { width:62px; height:62px; border-radius:50%; border:2px solid #ffffffa0; background:#222c20a6; box-shadow:0 3px 8px #0007; font-size:11px; font-weight:800; text-shadow:0 1px #000; touch-action:none }
+    .touch-btn.jump { width:69px; height:69px; border-color:#e1d6a7; background:#63603abf }
+    .joy { position:fixed; z-index:4; left:17px; bottom:112px; width:132px; height:132px; border:2px solid #ffffff80; border-radius:50%; background:#151b1599; touch-action:none }
+    .joy-knob { position:absolute; left:50%; top:50%; width:52px; height:52px; transform:translate(-50%,-50%); border-radius:50%; background:#cbd8c477; border:2px solid #ffffffb0; box-shadow:0 2px 5px #0008 }
+    @media(max-width:700px),(pointer:coarse) {
+      .top { padding:10px 11px }.wordmark { font-size:16px }.wordmark small { font-size:8px }
+      .tips { display:none }.coordinates { display:none }.icon-button { min-width:36px;height:36px }
+      .slot { width:min(9.1vw,43px); height:min(9.1vw,43px) }.hotbar { gap:2px;padding:4px }
+      .cube { width:23px;height:23px }.count { font-size:11px }
+      .mobile { display:block }.bottom { bottom:max(13px,env(safe-area-inset-bottom)) }
+      .bar-label { display:none }.card { padding:23px 18px 19px }.card h1 { font-size:30px }
+      .inv-layout { grid-template-columns:1fr }.item-grid { grid-template-columns:repeat(4,1fr) }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="AIcraft single-player voxel world"></canvas>
+  <header class="top">
+    <div class="wordmark">AICRAFT<small>SINGLEPLAYER</small></div>
+    <div class="top-right">
+      <div class="coordinates" id="coordinates">X 0&nbsp; Y 0&nbsp; Z 0<br>DAY 1</div>
+      <button class="icon-button" id="inventoryButton" title="Inventory (E)" aria-label="Open inventory">▦</button>
+      <button class="icon-button" id="fullscreenButton" title="Toggle fullscreen" aria-label="Toggle fullscreen">⛶</button>
+    </div>
+  </header>
+  <div class="tips"><b>WASD</b> move &nbsp; <b>SPACE</b> jump<br><b>MOUSE</b> look &nbsp; <b>LEFT</b> mine<br><b>RIGHT</b> place &nbsp; <b>E</b> inventory</div>
+  <div class="center-mark" id="crosshair"></div>
+  <div class="toast" id="toast"></div>
+  <section class="bottom">
+    <div class="hotbar" id="hotbar" aria-label="Hotbar"></div>
+    <div class="bar-label">AIcraft world · <span id="saveStatus">Local singleplayer</span></div>
+  </section>
+  <div class="mobile" id="mobileControls">
+    <div class="joy" id="joystick" aria-label="Movement joystick"><div class="joy-knob" id="joyKnob"></div></div>
+    <div class="mobile-actions">
+      <button class="touch-btn" id="placeButton">PLACE</button>
+      <button class="touch-btn" id="mineButton">MINE</button>
+      <button class="touch-btn jump" id="jumpButton">JUMP</button>
+    </div>
+  </div>
+  <section class="screen" id="startScreen">
+    <div class="card">
+      <h1>AIcraft</h1><div class="sub">A SINGLEPLAYER BLOCK-BUILDING WORLD</div>
+      <p>Explore a generated voxel world, gather blocks, craft materials, and build your own place. Your world is saved on this device.</p>
+      <button class="menu-btn" id="startButton">Create New World</button>
+      <div class="fine">Original AIcraft textures and code. Not affiliated with Mojang or Microsoft.<br>Use the fullscreen button for an immersive view.</div>
+    </div>
+  </section>
+  <section class="screen hidden" id="pauseScreen">
+    <div class="card">
+      <h1>Game paused</h1><div class="sub">YOUR WORLD IS SAVED ON THIS DEVICE</div>
+      <button class="menu-btn" id="resumeButton">Back to game</button>
+      <button class="menu-btn secondary" id="pauseInventoryButton">Inventory</button>
+      <button class="menu-btn secondary" id="saveQuitButton">Save &amp; return to title</button>
+      <div class="fine">Press ESC to pause or resume.</div>
+    </div>
+  </section>
+  <section class="screen hidden" id="inventoryScreen">
+    <div class="card inventory-card">
+      <h2>Inventory &amp; crafting</h2>
+      <div class="inv-layout">
+        <div><div class="inv-title">ITEMS · TAP AN ITEM TO PUT IT IN YOUR SELECTED SLOT</div><div class="item-grid" id="itemGrid"></div></div>
+        <div><div class="inv-title">CRAFTING</div><div id="recipes"></div><button class="menu-btn secondary" id="closeInventoryButton">Done</button></div>
+      </div>
+      <div class="fine">Selected hotbar slot: <span id="selectedItemName">Dirt</span></div>
+    </div>
+  </section>
+  <section class="screen hidden" id="errorScreen">
+    <div class="card"><h1>AIcraft could not start</h1><p id="errorMessage">WebGL could not be initialized. Try a browser with hardware acceleration enabled.</p></div>
+  </section>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
+    const canvas=document.querySelector('#game');
+    const toastEl=document.querySelector('#toast');
+    const startScreen=document.querySelector('#startScreen');
+    const pauseScreen=document.querySelector('#pauseScreen');
+    const inventoryScreen=document.querySelector('#inventoryScreen');
+    const inventoryButton=document.querySelector('#inventoryButton');
+    const mobileMode=matchMedia('(pointer: coarse)').matches || innerWidth<700;
+    const SAVE_KEY='aicraft_singleplayer_world_v1';
+    const MAP_SIZE=48, REACH=5.5, PLAYER_HEIGHT=1.8, PLAYER_RADIUS=.29;
+    const definitions=[
+      {id:0,name:'Grass',color:'#6d9c43',side:'#79563b',drop:1},
+      {id:1,name:'Dirt',color:'#79563b',drop:1},
+      {id:2,name:'Stone',color:'#858780',drop:2},
+      {id:3,name:'Oak log',color:'#76502e',top:'#ae8950',drop:3},
+      {id:4,name:'Oak leaves',color:'#45743b',drop:4},
+      {id:5,name:'Sand',color:'#d7c47b',drop:5},
+      {id:6,name:'Oak planks',color:'#bb8a50',drop:6},
+      {id:7,name:'Crafting table',color:'#95643a',drop:7},
+      {id:8,name:'Bedrock',color:'#454846',drop:null}
+    ];
+    const hotbarTypes=[1,0,2,3,4,5,6,7,8];
+    const inventory={0:0,1:32,2:0,3:8,4:0,5:16,6:24,7:1,8:0};
+    const keys={w:false,a:false,s:false,d:false,shift:false};
+    let selected=0, started=false, paused=false, inventoryOpen=false, pointerLocked=false;
+    let toastTimer=0, lastTime=0, elapsed=0, target=null, targetNormal=null, saveTimer=0;
+    let joystickVector={x:0,y:0}, joyPointer=null, lookPointer=null, lastTouch={x:0,y:0};
+    let blocks=new Map(), meshes=[], renderer, scene, camera, raycaster, outline;
+    let fallback2D=false, fallbackCtx=null, fallbackPatterns=[];
+    const player={x:24.5,y:4,z:24.5,velocityY:0,grounded:false,yaw:0,pitch:0};
+    const materialsByType=[];
+    const boxGeometry=new THREE.BoxGeometry(1,1,1);
+
+    function showError(message) {
+      document.querySelector('#errorMessage').textContent=message;
+      document.querySelector('#errorScreen').classList.remove('hidden');
+    }
+    function makeTexture(base,variation=18,grassSide=false,woodTop=false) {
+      const size=16, c=document.createElement('canvas'); c.width=size;c.height=size;
+      const g=c.getContext('2d'); g.fillStyle=base;g.fillRect(0,0,size,size);
+      let seed=base.charCodeAt(1)*927+base.charCodeAt(2)*317;
+      function rand(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
+      if(grassSide){g.fillStyle='#629b46';g.fillRect(0,0,16,4);for(let i=0;i<16;i++)if(rand()>.44){g.fillStyle=rand()>.5?'#74aa50':'#4b813c';g.fillRect(i,3+Math.floor(rand()*3),1,1)}}
+      if(woodTop){g.fillStyle='#bd975a';g.fillRect(1,1,14,14);g.fillStyle='#916a3b';g.fillRect(3,3,10,10);g.fillStyle='#c3a069';g.fillRect(5,5,6,6);g.fillStyle='#765432';g.fillRect(7,7,2,2)}
+      for(let i=0;i<64;i++){const x=Math.floor(rand()*16),y=Math.floor(rand()*16);const n=Math.floor(rand()*variation);g.fillStyle=rand()>.5?`rgba(255,255,255,${n/180})`:`rgba(0,0,0,${n/125})`;g.fillRect(x,y,1+Math.floor(rand()*2),1)}
+      const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;tex.colorSpace=THREE.SRGBColorSpace;return tex;
+    }
+    function mat(color,variation=16,grassSide=false,woodTop=false) {
+      return new THREE.MeshLambertMaterial({map:makeTexture(color,variation,grassSide,woodTop)});
+    }
+    function initMaterials() {
+      const grassTop=mat('#6d9c43',26),grassSide=mat('#79563b',18,true),dirt=mat('#79563b',20),stone=mat('#858780',20),woodSide=mat('#76502e',17),woodTop=mat('#ae8950',12,false,true),leaves=mat('#45743b',30),sand=mat('#d7c47b',14),planks=mat('#bb8a50',15),tableTop=mat('#a87543',14),bedrock=mat('#454846',25);
+      materialsByType[0]=[grassSide,grassSide,grassTop,dirt,grassSide,grassSide];
+      materialsByType[1]=dirt;materialsByType[2]=stone;
+      materialsByType[3]=[woodSide,woodSide,woodTop,woodTop,woodSide,woodSide];
+      materialsByType[4]=leaves;materialsByType[5]=sand;materialsByType[6]=planks;
+      materialsByType[7]=[tableTop,tableTop,tableTop,woodSide,tableTop,tableTop];
+      materialsByType[8]=bedrock;
+    }
+    function key(x,y,z){return `${x},${y},${z}`}
+    function addBlock(x,y,z,type){blocks.set(key(x,y,z),type)}
+    function blockAt(x,y,z){return blocks.get(key(x,y,z))}
+    function surfaceHeight(x,z) {
+      const wav=Math.sin(x*.28)*.65+Math.cos(z*.24)*.55+Math.sin((x+z)*.16)*.45;
+      return Math.max(2,Math.min(6,Math.floor(3.4+wav)));
+    }
+    function generateWorld() {
+      blocks.clear();
+      const center=MAP_SIZE/2;
+      for(let x=0;x<MAP_SIZE;x++)for(let z=0;z<MAP_SIZE;z++){
+        let h=surfaceHeight(x,z);
+        if(Math.hypot(x-center,z-center)<5.5)h=3;
+        addBlock(x,0,z,8);
+        for(let y=1;y<h;y++)addBlock(x,y,z,y===1?2:1);
+        addBlock(x,h,z,h<=2?5:0);
+      }
+      let treeIndex=0;
+      for(let x=3;x<MAP_SIZE-3;x+=5)for(let z=3;z<MAP_SIZE-3;z+=6){
+        const jitter=((x*13+z*7)%5)-2,tx=x+jitter%3,tz=z+(jitter+4)%3;
+        if(Math.hypot(tx-center,tz-center)<7.5||((tx*3+tz*7)%4===0))continue;
+        const ground=surfaceHeight(tx,tz), height=3+(treeIndex++%2);
+        for(let y=ground+1;y<=ground+height;y++)addBlock(tx,y,tz,3);
+        for(let dy=-1;dy<=1;dy++)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
+          if(Math.abs(dx)+Math.abs(dz)+(dy===1?1:0)>4)continue;
+          const bx=tx+dx,by=ground+height+dy,bz=tz+dz;
+          if(bx>0&&bx<MAP_SIZE-1&&bz>0&&bz<MAP_SIZE-1&&!blockAt(bx,by,bz))addBlock(bx,by,bz,4);
+        }
+      }
+      player.x=center+.5;player.z=center+.5;player.y=4;player.velocityY=0;player.yaw=0;player.pitch=0;
+    }
+    function clearMeshes() {
+      for(const m of meshes){scene.remove(m);m.dispose?.()}
+      meshes=[];
+    }
+    function rebuildWorld() {
+      clearMeshes();
+      const groups=Array.from({length:9},()=>[]);
+      for(const [k,type] of blocks){const [x,y,z]=k.split(',').map(Number);groups[type].push({x,y,z,type})}
+      groups.forEach((items,type)=>{
+        if(!items.length)return;
+        const mesh=new THREE.InstancedMesh(boxGeometry,materialsByType[type],items.length);
+        const dummy=new THREE.Object3D();
+        items.forEach((b,i)=>{dummy.position.set(b.x+.5,b.y+.5,b.z+.5);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix)});
+        mesh.instanceMatrix.needsUpdate=true;
+        mesh.userData.blockInstances=items;mesh.userData.blockType=type;
+        mesh.frustumCulled=false;
+        scene.add(mesh);meshes.push(mesh);
+      });
+    }
+    function restoreSave() {
+      try {
+        const saved=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+        if(!saved||!Array.isArray(saved.blocks))return false;
+        blocks=new Map(saved.blocks);
+        if(saved.inventory)Object.assign(inventory,saved.inventory);
+        if(Array.isArray(saved.hotbar)&&saved.hotbar.length===9)hotbarTypes.splice(0,9,...saved.hotbar);
+        if(Number.isInteger(saved.selected))selected=Math.max(0,Math.min(8,saved.selected));
+        if(saved.player){player.x=saved.player.x;player.y=saved.player.y;player.z=saved.player.z;player.yaw=saved.player.yaw||0;player.pitch=saved.player.pitch||0}
+        return true;
+      }catch(e){console.warn('Saved world could not be loaded',e);return false}
+    }
+    function saveWorld() {
+      try {
+        const data={blocks:[...blocks.entries()],inventory,hotbar:hotbarTypes,selected,player:{x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch}};
+        localStorage.setItem(SAVE_KEY,JSON.stringify(data));
+        document.querySelector('#saveStatus').textContent='Saved on this device';
+      }catch(e){document.querySelector('#saveStatus').textContent='Save unavailable';console.warn('Could not save world',e)}
+    }
+    function initThree() {
+      let webglContext=null;
+      try {webglContext=canvas.getContext('webgl2',{antialias:false,alpha:false,powerPreference:'high-performance'})}catch(e){}
+      if(!webglContext){initCanvasFallback();return}
+      try {renderer=new THREE.WebGLRenderer({canvas,context:webglContext,antialias:false,alpha:false,powerPreference:'high-performance'})}
+      catch(e){initCanvasFallback();return}
+      renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+      renderer.setSize(innerWidth,innerHeight);
+      renderer.outputColorSpace=THREE.SRGBColorSpace;
+      renderer.toneMapping=THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure=1.16;
+      scene=new THREE.Scene();scene.background=new THREE.Color('#9bc9e5');scene.fog=new THREE.Fog('#b8d2df',30,58);
+      camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.08,100);
+      const hemi=new THREE.HemisphereLight('#e6f4ff','#59684b',2.05);scene.add(hemi);
+      const sun=new THREE.DirectionalLight('#fff2d1',2.35);sun.position.set(-22,35,-15);scene.add(sun);
+      raycaster=new THREE.Raycaster();raycaster.far=REACH;
+      outline=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.012,1.012,1.012)),new THREE.LineBasicMaterial({color:'#10140e',transparent:true,opacity:.93,depthTest:true}));
+      outline.visible=false;outline.renderOrder=4;scene.add(outline);
+      initMaterials();
+      const loaded=restoreSave();
+      if(!loaded)generateWorld();
+      rebuildWorld();
+      addEventListener('resize',resize);
+      requestAnimationFrame(frame);
+      if(loaded)flash('World loaded');
+    }
+    function resize() {
+      if(fallback2D&&fallbackCtx){
+        const ratio=Math.min(devicePixelRatio||1,1.5);
+        canvas.width=Math.floor(innerWidth*ratio);canvas.height=Math.floor(innerHeight*ratio);
+        fallbackCtx.setTransform(ratio,0,0,ratio,0,0);
+        return;
+      }
+      if(!renderer||!camera)return;
+      renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);
+      camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+    }
+    function initCanvasFallback() {
+      fallbackCtx=canvas.getContext('2d');
+      if(!fallbackCtx){showError('This browser could not create a graphics canvas. Try a current version of Chrome, Firefox, Safari, or Edge.');return}
+      fallback2D=true;
+      const loaded=restoreSave();if(!loaded)generateWorld();
+      makeFallbackPatterns();resize();addEventListener('resize',resize);
+      requestAnimationFrame(frame);
+      if(loaded)flash('Saved world loaded · Canvas compatibility mode');
+    }
+    function makeFallbackPatterns() {
+      fallbackPatterns=definitions.map(item=>{
+        const c=document.createElement('canvas');c.width=16;c.height=16;
+        const g=c.getContext('2d');g.fillStyle=item.color;g.fillRect(0,0,16,16);
+        let seed=item.id*797+31;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};
+        if(item.id===0){g.fillStyle='#6d9c43';g.fillRect(0,0,16,4);g.fillStyle='#79934d';for(let i=0;i<11;i++)g.fillRect(Math.floor(rand()*16),Math.floor(rand()*16),1,1)}
+        if(item.id===3){g.fillStyle='#a17a42';for(let x=3;x<16;x+=5)g.fillRect(x,0,1,16)}
+        if(item.id===4){g.fillStyle='#59854a';for(let i=0;i<35;i++)g.fillRect(Math.floor(rand()*16),Math.floor(rand()*16),2,2)}
+        for(let i=0;i<42;i++){g.fillStyle=rand()>.5?'#ffffff18':'#00000020';g.fillRect(Math.floor(rand()*16),Math.floor(rand()*16),1+Math.floor(rand()*2),1)}
+        return fallbackCtx.createPattern(c,'repeat');
+      });
+    }
+    function updateFallbackTarget() {
+      target=null;targetNormal=null;
+      const ox=player.x,oz=player.z,eyeY=player.y+1.55;
+      let px=Math.floor(ox),pz=Math.floor(oz);
+      for(let dist=.32;dist<=REACH;dist+=.06){
+        const wx=ox+Math.sin(player.yaw)*dist,wz=oz+Math.cos(player.yaw)*dist;
+        const bx=Math.floor(wx),bz=Math.floor(wz),by=Math.floor(eyeY);
+        let foundY=blockAt(bx,by,bz)!==undefined?by:undefined;
+        if(foundY===undefined&&blockAt(bx,by-1,bz)!==undefined)foundY=by-1;
+        if(foundY===undefined&&blockAt(bx,by-2,bz)!==undefined)foundY=by-2;
+        if(foundY!==undefined){
+          target={x:bx,y:foundY,z:bz,type:blockAt(bx,foundY,bz)};
+          const dx=bx-px,dz=bz-pz;
+          if(Math.abs(dx)>Math.abs(dz))targetNormal={x:dx>0?-1:1,y:0,z:0};
+          else targetNormal={x:0,y:0,z:dz>0?-1:1};
+          return;
+        }
+        px=bx;pz=bz;
+      }
+    }
+    function renderFallback() {
+      const g=fallbackCtx,W=innerWidth,H=innerHeight,tw=Math.max(20,Math.min(34,W/32)),th=tw*.48,bh=tw*.53;
+      const cx=W/2,cy=H*.51;
+      const sky=g.createLinearGradient(0,0,0,H*.58);sky.addColorStop(0,'#73a6c5');sky.addColorStop(.72,'#b7cfce');sky.addColorStop(1,'#d7cba6');
+      g.fillStyle=sky;g.fillRect(0,0,W,H);g.fillStyle='#79a568';g.fillRect(0,H*.57,W,H*.43);
+      const visible=[];
+      for(const [k,type] of blocks){
+        const [x,y,z]=k.split(',').map(Number);
+        if(Math.abs(x-player.x)>19||Math.abs(z-player.z)>19)continue;
+        visible.push({x,y,z,type});
+      }
+      visible.sort((a,b)=>(a.x+a.z-b.x-b.z)||(a.y-b.y));
+      const diamond=(x,y,fill,stroke)=>{g.beginPath();g.moveTo(x,y-th/2);g.lineTo(x+tw/2,y);g.lineTo(x,y+th/2);g.lineTo(x-tw/2,y);g.closePath();g.fillStyle=fill;g.fill();if(stroke){g.strokeStyle=stroke;g.lineWidth=1;g.stroke()}};
+      for(const b of visible){
+        const dx=b.x+.5-player.x,dz=b.z+.5-player.z;
+        const sx=cx+(dx-dz)*tw/2, baseY=cy+(dx+dz)*th/2-(b.y-player.y)*bh;
+        if(sx<-tw||sx>W+tw||baseY<-bh||baseY>H+bh)continue;
+        const type=b.type, pattern=fallbackPatterns[type]||'#777', below=blockAt(b.x,b.y-1,b.z)!==undefined;
+        const xSide=blockAt(b.x+1,b.y,b.z)===undefined, zSide=blockAt(b.x,b.y,b.z+1)===undefined;
+        if(xSide){
+          g.beginPath();g.moveTo(sx+tw/2,baseY);g.lineTo(sx,baseY+th/2);g.lineTo(sx,baseY+th/2+bh);g.lineTo(sx+tw/2,baseY+bh);g.closePath();
+          g.fillStyle=type===0?'#55733b':type===5?'#ae9c5f':'#525b4a';g.fill();
+          if(type===0){g.fillStyle='#5e8e42';g.beginPath();g.moveTo(sx+tw/2,baseY);g.lineTo(sx,baseY+th/2);g.lineTo(sx,baseY+th/2+Math.min(4,bh*.23));g.lineTo(sx+tw/2,baseY+Math.min(4,bh*.23));g.closePath();g.fill()}
+        }
+        if(zSide){
+          g.beginPath();g.moveTo(sx-tw/2,baseY);g.lineTo(sx,baseY+th/2);g.lineTo(sx,baseY+th/2+bh);g.lineTo(sx-tw/2,baseY+bh);g.closePath();
+          g.fillStyle=type===0?'#668947':type===5?'#c3b16c':'#606652';g.fill();
+          if(type===0){g.fillStyle='#6c9e4b';g.beginPath();g.moveTo(sx-tw/2,baseY);g.lineTo(sx,baseY+th/2);g.lineTo(sx,baseY+th/2+Math.min(4,bh*.23));g.lineTo(sx-tw/2,baseY+Math.min(4,bh*.23));g.closePath();g.fill()}
+        }
+        diamond(sx,baseY,pattern);
+        if(target&&target.x===b.x&&target.y===b.y&&target.z===b.z){
+          g.beginPath();g.moveTo(sx,baseY-th/2);g.lineTo(sx+tw/2,baseY);g.lineTo(sx,baseY+th/2);g.lineTo(sx-tw/2,baseY);g.closePath();
+          g.strokeStyle='#fff7bd';g.lineWidth=2;g.stroke();
+        }
+      }
+      const px=cx,pY=cy+th*.1;
+      g.fillStyle='#28291f';g.beginPath();g.ellipse(px,pY+bh*.48,tw*.18,th*.12,0,0,Math.PI*2);g.fill();
+      g.fillStyle='#e3d0a1';g.fillRect(px-tw*.1,pY-bh*.45,tw*.2,bh*.52);
+      g.fillStyle='#567948';g.fillRect(px-tw*.16,pY-bh*.15,tw*.32,bh*.36);
+      const dirX=Math.sin(player.yaw),dirZ=Math.cos(player.yaw);
+      g.fillStyle='#fff0bd';g.beginPath();g.arc(px+dirX*tw*.19,pY-bh*.3+dirZ*th*.15,2.2,0,Math.PI*2);g.fill();
+      g.fillStyle='#172119cc';g.fillRect(13,innerHeight-97,150,39);
+      g.fillStyle='#fff';g.font='11px monospace';g.fillText('CANVAS MODE · SINGLEPLAYER',21,innerHeight-80);
+      g.fillStyle='#d6e8c8';g.fillText('3D graphics unavailable',21,innerHeight-64);
+    }
+    function collision(x,y,z) {
+      if(x<.3||z<.3||x>MAP_SIZE-.3||z>MAP_SIZE-.3)return true;
+      const minX=Math.floor(x-PLAYER_RADIUS),maxX=Math.floor(x+PLAYER_RADIUS),minZ=Math.floor(z-PLAYER_RADIUS),maxZ=Math.floor(z+PLAYER_RADIUS);
+      const minY=Math.floor(y+.05),maxY=Math.floor(y+PLAYER_HEIGHT-.06);
+      for(let bx=minX;bx<=maxX;bx++)for(let bz=minZ;bz<=maxZ;bz++)for(let by=minY;by<=maxY;by++)if(blockAt(bx,by,bz)!==undefined)return true;
+      return false;
+    }
+    function updatePlayer(dt) {
+      if(!started||paused||inventoryOpen)return;
+      let forward=(keys.w?1:0)-(keys.s?1:0)-joystickVector.y;
+      let strafe=(keys.d?1:0)-(keys.a?1:0)+joystickVector.x;
+      const length=Math.hypot(forward,strafe);
+      if(length>1){forward/=length;strafe/=length}
+      const speed=keys.shift?6.4:4.8;
+      const dx=(Math.sin(player.yaw)*forward+Math.cos(player.yaw)*strafe)*speed*dt;
+      const dz=(Math.cos(player.yaw)*forward-Math.sin(player.yaw)*strafe)*speed*dt;
+      if(dx&&!collision(player.x+dx,player.y,player.z))player.x+=dx;
+      if(dz&&!collision(player.x,player.y,player.z+dz))player.z+=dz;
+      player.velocityY-=22*dt;
+      const nextY=player.y+player.velocityY*dt;
+      if(!collision(player.x,nextY,player.z)){player.y=nextY;player.grounded=false}
+      else if(player.velocityY<0){player.y=Math.ceil(nextY);player.velocityY=0;player.grounded=true}
+      else {player.velocityY=0}
+      if(player.y< -8){player.x=24.5;player.z=24.5;player.y=4;player.velocityY=0;flash('You returned to your world spawn')}
+    }
+    function updateTarget() {
+      camera.position.set(player.x,player.y+1.62,player.z);
+      camera.rotation.order='YXZ';camera.rotation.y=player.yaw+Math.PI;camera.rotation.x=player.pitch;
+      raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
+      const hits=raycaster.intersectObjects(meshes,false);
+      const hit=hits.find(h=>h.distance<=REACH&&h.instanceId!==undefined);
+      if(!hit){target=null;targetNormal=null;outline.visible=false;return}
+      const block=hit.object.userData.blockInstances[hit.instanceId];
+      if(!block){target=null;outline.visible=false;return}
+      target=block;targetNormal=hit.face.normal.clone();
+      outline.position.set(block.x+.5,block.y+.5,block.z+.5);outline.visible=true;
+    }
+    function updateHud() {
+      document.querySelector('#coordinates').innerHTML=`X ${Math.floor(player.x)}&nbsp; Y ${Math.floor(player.y)}&nbsp; Z ${Math.floor(player.z)}<br>DAY 1`;
+      document.querySelectorAll('.slot').forEach((el,i)=>{
+        el.classList.toggle('selected',i===selected);
+        const type=hotbarTypes[i],item=definitions[type];
+        el.querySelector('.cube').style.background=`linear-gradient(135deg,${item.top||item.color} 0 35%,${item.color} 36% 100%)`;
+        const count=inventory[type]||0;el.querySelector('.count').textContent=count?count:'';
+      });
+    }
+    function frame(now) {
+      const dt=Math.min((now-lastTime)/1000||0,.04);lastTime=now;
+      if(scene&&renderer){
+        elapsed+=dt;updatePlayer(dt);updateTarget();updateHud();
+        if(started&&!paused){saveTimer+=dt;if(saveTimer>20){saveTimer=0;saveWorld()}}
+        renderer.render(scene,camera);
+      } else if(fallback2D&&fallbackCtx){
+        elapsed+=dt;updatePlayer(dt);updateFallbackTarget();updateHud();renderFallback();
+        if(started&&!paused){saveTimer+=dt;if(saveTimer>20){saveTimer=0;saveWorld()}}
+      }
+      requestAnimationFrame(frame);
+    }
+    function flash(text) {
+      toastEl.textContent=text;toastEl.classList.add('show');clearTimeout(toastTimer);
+      toastTimer=setTimeout(()=>toastEl.classList.remove('show'),1450);
+    }
+    function selectSlot(index) {
+      selected=(index+9)%9;
+      document.querySelectorAll('.slot').forEach((el,i)=>el.classList.toggle('selected',i===selected));
+      const name=definitions[hotbarTypes[selected]].name;
+      const selectedName=document.querySelector('#selectedItemName');if(selectedName)selectedName.textContent=name;
+    }
+    function mineBlock() {
+      if(!started||paused||inventoryOpen||!target)return;
+      if(target.type===8){flash('Bedrock cannot be mined');return}
+      const k=key(target.x,target.y,target.z),type=target.type;
+      blocks.delete(k);
+      const drop=definitions[type].drop;if(drop!==null)inventory[drop]=(inventory[drop]||0)+1;
+      rebuildWorld();target=null;outline.visible=false;
+      flash(`${definitions[type].name} mined`);
+    }
+    function placeBlock() {
+      if(!started||paused||inventoryOpen||!target||!targetNormal)return;
+      const type=hotbarTypes[selected],count=inventory[type]||0;
+      if(count<1){flash(`No ${definitions[type].name.toLowerCase()} in this slot`);return}
+      const x=target.x+Math.round(targetNormal.x),y=target.y+Math.round(targetNormal.y),z=target.z+Math.round(targetNormal.z);
+      if(y<1||blockAt(x,y,z)!==undefined){flash('There is no room to place a block');return}
+      const playerOccupies=x>=Math.floor(player.x-PLAYER_RADIUS)&&x<=Math.floor(player.x+PLAYER_RADIUS)&&z>=Math.floor(player.z-PLAYER_RADIUS)&&z<=Math.floor(player.z+PLAYER_RADIUS)&&y<player.y+PLAYER_HEIGHT&&y+1>player.y;
+      if(playerOccupies){flash('You cannot place a block inside yourself');return}
+      addBlock(x,y,z,type);inventory[type]=count-1;rebuildWorld();flash(`${definitions[type].name} placed`);
+    }
+    function createHotbar() {
+      const bar=document.querySelector('#hotbar');bar.innerHTML='';
+      for(let i=0;i<9;i++){
+        const el=document.createElement('button');el.className='slot';el.type='button';el.setAttribute('aria-label',`Hotbar slot ${i+1}`);
+        el.innerHTML=`<span class="slot-num">${i+1}</span><div class="cube"></div><span class="count"></span>`;
+        el.addEventListener('click',()=>selectSlot(i));bar.appendChild(el);
+      }
+    }
+    function openInventory() {
+      if(!started||paused)return;
+      inventoryOpen=true;inventoryScreen.classList.remove('hidden');if(pointerLocked)document.exitPointerLock();
+      renderInventory();
+    }
+    function closeInventory() {
+      inventoryOpen=false;inventoryScreen.classList.add('hidden');
+      if(started&&!mobileMode)canvas.requestPointerLock?.();
+      saveWorld();
+    }
+    function renderInventory() {
+      const grid=document.querySelector('#itemGrid'),recipes=document.querySelector('#recipes');grid.innerHTML='';recipes.innerHTML='';
+      definitions.filter(d=>d.id!==8).forEach(item=>{
+        const button=document.createElement('button');button.className='item';button.type='button';
+        button.innerHTML=`<i class="cube" style="background:linear-gradient(135deg,${item.top||item.color} 0 35%,${item.color} 36% 100%)"></i><span>${item.name}<small>× ${inventory[item.id]||0}</small></span>`;
+        button.addEventListener('click',()=>{hotbarTypes[selected]=item.id;selectSlot(selected);renderInventory();flash(`${item.name} assigned to slot ${selected+1}`)});
+        grid.appendChild(button);
+      });
+      const recipeList=[
+        {name:'4 Oak planks',detail:'1 Oak log',need:{3:1},give:{6:4}},
+        {name:'1 Crafting table',detail:'4 Oak planks',need:{6:4},give:{7:1}},
+        {name:'4 Dirt',detail:'1 Grass block',need:{0:1},give:{1:4}}
+      ];
+      for(const recipe of recipeList){
+        const can=Object.entries(recipe.need).every(([id,n])=>(inventory[id]||0)>=n);
+        const button=document.createElement('button');button.className='recipe';button.disabled=!can;button.innerHTML=`Craft ${recipe.name}<small>Requires ${recipe.detail}</small>`;
+        button.addEventListener('click',()=>{
+          if(!Object.entries(recipe.need).every(([id,n])=>(inventory[id]||0)>=n))return;
+          for(const [id,n] of Object.entries(recipe.need))inventory[id]-=n;
+          for(const [id,n] of Object.entries(recipe.give))inventory[id]=(inventory[id]||0)+n;
+          flash(`Crafted ${recipe.name}`);renderInventory();saveWorld();
+        });
+        recipes.appendChild(button);
+      }
+      document.querySelector('#selectedItemName').textContent=definitions[hotbarTypes[selected]].name;
+    }
+    function startGame() {
+      started=true;paused=false;startScreen.classList.add('hidden');pauseScreen.classList.add('hidden');
+      if(!mobileMode)canvas.requestPointerLock?.();
+      saveWorld();
+    }
+    function pauseGame() {
+      if(!started||inventoryOpen)return;
+      paused=true;pauseScreen.classList.remove('hidden');saveWorld();
+    }
+    function resumeGame() {
+      paused=false;pauseScreen.classList.add('hidden');
+      if(!mobileMode)canvas.requestPointerLock?.();
+    }
+    function startOrResume() {if(!started)startGame();else resumeGame()}
+
+    createHotbar();
+    document.querySelector('#startButton').addEventListener('click',startGame);
+    document.querySelector('#resumeButton').addEventListener('click',resumeGame);
+    document.querySelector('#pauseInventoryButton').addEventListener('click',()=>{pauseScreen.classList.add('hidden');paused=false;openInventory()});
+    document.querySelector('#saveQuitButton').addEventListener('click',()=>{saveWorld();paused=false;started=false;pauseScreen.classList.add('hidden');startScreen.classList.remove('hidden');if(pointerLocked)document.exitPointerLock()});
+    document.querySelector('#closeInventoryButton').addEventListener('click',closeInventory);
+    inventoryButton.addEventListener('click',()=>inventoryOpen?closeInventory():openInventory());
+    document.querySelector('#fullscreenButton').addEventListener('click',async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(e){flash('Fullscreen is unavailable in this browser')}});
+    document.addEventListener('pointerlockchange',()=>{
+      pointerLocked=document.pointerLockElement===canvas;
+      if(started&&!pointerLocked&&!mobileMode&&!inventoryOpen&&!paused)pauseGame();
+    });
+    canvas.addEventListener('click',()=>{if(started&&!mobileMode&&!paused&&!inventoryOpen&&!pointerLocked)canvas.requestPointerLock?.()});
+    addEventListener('mousemove',e=>{if(pointerLocked&&started&&!paused){player.yaw-=e.movementX*.0025;player.pitch=Math.max(-1.48,Math.min(1.48,player.pitch-e.movementY*.0022))}});
+    addEventListener('keydown',e=>{
+      const k=e.key.toLowerCase();
+      if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
+      if(k==='escape'){if(inventoryOpen){closeInventory();return}if(paused){resumeGame();return}}
+      if(k==='e'){if(inventoryOpen)closeInventory();else openInventory();return}
+      if(k>='1'&&k<='9')selectSlot(Number(k)-1);
+      if(k===' ')keys.jump=true;
+      if(k==='shift')keys.shift=true;
+      if(k==='w'||k==='a'||k==='s'||k==='d')keys[k]=true;
+    },{passive:false});
+    addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k===' ')keys.jump=false;if(k==='shift')keys.shift=false;if(k in keys)keys[k]=false});
+    addEventListener('keydown',e=>{if(e.code==='Space'&&started&&!paused&&!inventoryOpen&&player.grounded){player.velocityY=8.2;player.grounded=false}});
+    canvas.addEventListener('mousedown',e=>{if(!started||paused||inventoryOpen)return;if(!pointerLocked&&!mobileMode)return;if(e.button===0)mineBlock();else if(e.button===2)placeBlock()});
+    canvas.addEventListener('contextmenu',e=>e.preventDefault());
+    document.querySelector('#mineButton').addEventListener('pointerdown',e=>{e.preventDefault();mineBlock()});
+    document.querySelector('#placeButton').addEventListener('pointerdown',e=>{e.preventDefault();placeBlock()});
+    document.querySelector('#jumpButton').addEventListener('pointerdown',e=>{e.preventDefault();if(player.grounded&&started&&!paused){player.velocityY=8.2;player.grounded=false}});
+    const joy=document.querySelector('#joystick'),knob=document.querySelector('#joyKnob');
+    joy.addEventListener('pointerdown',e=>{e.preventDefault();joyPointer=e.pointerId;joy.setPointerCapture(e.pointerId);updateJoy(e)});
+    joy.addEventListener('pointermove',e=>{if(e.pointerId===joyPointer)updateJoy(e)});
+    function updateJoy(e){const rect=joy.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2,dx=e.clientX-cx,dy=e.clientY-cy,max=42,l=Math.hypot(dx,dy)||1,m=Math.min(max,l);joystickVector={x:dx/l*m/max,y:dy/l*m/max};knob.style.left=`calc(50% + ${dx/l*m}px)`;knob.style.top=`calc(50% + ${dy/l*m}px)`}
+    function resetJoy(e){if(e.pointerId!==joyPointer)return;joyPointer=null;joystickVector={x:0,y:0};knob.style.left='50%';knob.style.top='50%'}
+    joy.addEventListener('pointerup',resetJoy);joy.addEventListener('pointercancel',resetJoy);
+    canvas.addEventListener('pointerdown',e=>{if(!mobileMode||!started||paused||inventoryOpen)return;if(e.pointerType==='touch'){lookPointer=e.pointerId;lastTouch={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId)}});
+    canvas.addEventListener('pointermove',e=>{if(e.pointerId===lookPointer){const dx=e.clientX-lastTouch.x,dy=e.clientY-lastTouch.y;lastTouch={x:e.clientX,y:e.clientY};player.yaw-=dx*.006;player.pitch=Math.max(-1.48,Math.min(1.48,player.pitch-dy*.005))}});
+    canvas.addEventListener('pointerup',e=>{if(e.pointerId===lookPointer)lookPointer=null});
+    canvas.addEventListener('pointercancel',e=>{if(e.pointerId===lookPointer)lookPointer=null});
+    addEventListener('beforeunload',saveWorld);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)saveWorld()});
+    initThree();
+  </script>
+</body>
+</html>
