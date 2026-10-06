@@ -135,6 +135,8 @@
   </section>
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+    import { hash2D, terrainColumn, isCave, oreAt, makeWorldSeed, SEA_LEVEL } from './src/world/terrain.js';
+    import { IndexedDBWorldStore } from './src/storage/IndexedDBWorldStore.js';
 
     const canvas=document.querySelector('#game');
     const toastEl=document.querySelector('#toast');
@@ -144,23 +146,33 @@
     const inventoryButton=document.querySelector('#inventoryButton');
     const mobileMode=matchMedia('(pointer: coarse)').matches || innerWidth<700;
     const SAVE_KEY='aicraft_singleplayer_world_v1';
+    const worldStore=new IndexedDBWorldStore();
     const CHUNK_SIZE=16, CHUNK_RADIUS=1, REACH=5.5, PLAYER_HEIGHT=1.8, PLAYER_RADIUS=.29;
     const definitions=[
-      {id:0,name:'Grass',color:'#6d9c43',side:'#79563b',drop:1},
-      {id:1,name:'Dirt',color:'#79563b',drop:1},
-      {id:2,name:'Stone',color:'#858780',drop:2},
-      {id:3,name:'Oak log',color:'#76502e',top:'#ae8950',drop:3},
-      {id:4,name:'Oak leaves',color:'#45743b',drop:4},
-      {id:5,name:'Sand',color:'#d7c47b',drop:5},
-      {id:6,name:'Oak planks',color:'#bb8a50',drop:6},
-      {id:7,name:'Crafting table',color:'#95643a',drop:7},
-      {id:8,name:'Bedrock',color:'#454846',drop:null},
-      {id:9,name:'Rift portal',color:'#783dd0',drop:9},
-      {id:10,name:'Rift crystal',color:'#45c8c8',drop:10},
-      {id:11,name:'Wild berries',color:'#c64347',drop:11,food:5}
+      {id:0,name:'Grass',color:'#6d9c43',side:'#79563b',drop:1,hardness:.6,blastResistance:3,requiredTool:'shovel',sound:'grass',collision:true,transparent:false,emission:0},
+      {id:1,name:'Dirt',color:'#79563b',drop:1,hardness:.5,blastResistance:2.5,requiredTool:'shovel',sound:'dirt',collision:true,transparent:false,emission:0},
+      {id:2,name:'Stone',color:'#858780',drop:2,hardness:1.5,blastResistance:6,requiredTool:'pickaxe',sound:'stone',collision:true,transparent:false,emission:0},
+      {id:3,name:'Oak log',color:'#76502e',top:'#ae8950',drop:3,hardness:2,blastResistance:3,requiredTool:'axe',sound:'wood',collision:true,transparent:false,emission:0},
+      {id:4,name:'Oak leaves',color:'#45743b',drop:4,hardness:.2,blastResistance:.2,requiredTool:'shears',sound:'leaves',collision:true,transparent:true,emission:0},
+      {id:5,name:'Sand',color:'#d7c47b',drop:5,hardness:.5,blastResistance:2.5,requiredTool:'shovel',sound:'sand',collision:true,transparent:false,emission:0},
+      {id:6,name:'Oak planks',color:'#bb8a50',drop:6,hardness:2,blastResistance:3,requiredTool:'axe',sound:'wood',collision:true,transparent:false,emission:0},
+      {id:7,name:'Crafting table',color:'#95643a',drop:7,hardness:2.5,blastResistance:3,requiredTool:'axe',sound:'wood',collision:true,transparent:false,emission:0},
+      {id:8,name:'Bedrock',color:'#454846',drop:null,hardness:Infinity,blastResistance:3600000,requiredTool:null,sound:'stone',collision:true,transparent:false,emission:0},
+      {id:9,name:'Rift portal',color:'#783dd0',drop:9,hardness:.3,blastResistance:1,requiredTool:null,sound:'magic',collision:false,transparent:true,emission:7},
+      {id:10,name:'Rift crystal',color:'#45c8c8',drop:10,hardness:1.5,blastResistance:4,requiredTool:'pickaxe',sound:'crystal',collision:true,transparent:false,emission:2},
+      {id:11,name:'Wild berries',color:'#c64347',drop:11,food:5,hardness:.2,blastResistance:.3,requiredTool:null,sound:'plant',collision:true,transparent:false,emission:0},
+      {id:12,name:'Gravel',color:'#85827c',drop:12,hardness:.6,blastResistance:3,requiredTool:'shovel',sound:'gravel',collision:true,transparent:false,emission:0},
+      {id:13,name:'Water',color:'#4785c7',drop:null,hardness:Infinity,blastResistance:100,requiredTool:null,sound:'water',collision:false,transparent:true,emission:0,fluid:'water'},
+      {id:14,name:'Coal ore',color:'#424441',drop:14,hardness:3,blastResistance:6,requiredTool:'pickaxe',sound:'stone',collision:true,transparent:false,emission:0},
+      {id:15,name:'Iron ore',color:'#9d8973',drop:15,hardness:3,blastResistance:6,requiredTool:'pickaxe',sound:'stone',collision:true,transparent:false,emission:0},
+      {id:16,name:'Snow',color:'#e8f1f2',drop:16,hardness:.2,blastResistance:.2,requiredTool:'shovel',sound:'snow',collision:true,transparent:false,emission:0},
+      {id:17,name:'Glass',color:'#a8d7e5',drop:17,hardness:.3,blastResistance:.3,requiredTool:null,sound:'glass',collision:true,transparent:true,emission:0}
     ];
+    const blockRegistry=new Map(definitions.map(block=>[block.id,block]));
     const hotbarTypes=[1,0,2,3,4,5,6,7,8];
     const inventory={0:0,1:32,2:0,3:8,4:0,5:16,6:24,7:1,8:0,9:0,10:0,11:0};
+    const defaultInventory={...inventory};
+    const defaultHotbar=[...hotbarTypes];
     const newWorldState=()=>({blocks:new Map(),edits:new Map(),editsByChunk:new Map(),chunkBlocks:new Map(),loadedChunks:new Set()});
     const worldStates={overworld:newWorldState(),rift:newWorldState()};
     let dimensionId='overworld',currentWorld=worldStates.overworld,editedBlocks=currentWorld.edits,lastStreamChunk='';
@@ -168,6 +180,7 @@
     let selected=0, started=false, paused=false, inventoryOpen=false, pointerLocked=false;
     let toastTimer=0, lastTime=0, elapsed=0, target=null, targetNormal=null, saveTimer=0;
     let worldClock=36,health=20,hunger=20,survivalTimer=0,healthRegenTimer=0,starveTimer=0,monsterSpawnTimer=0,dayNumber=1,hudTimer=0;
+    let worldSeed='aicraft-preview',hasSavedWorld=false;
     let monsters=[],hemiLight=null,sunLight=null,skyFactor=1;
     let joystickVector={x:0,y:0}, joyPointer=null, lookPointer=null, lastTouch={x:0,y:0};
     let blocks=currentWorld.blocks, meshes=[], renderer, scene, camera, raycaster, outline;
@@ -201,6 +214,9 @@
     }
     function initMaterials() {
       const grassTop=mat('#6d9c43',26),grassSide=mat('#79563b',18,true),dirt=mat('#79563b',20),stone=mat('#858780',20),woodSide=mat('#76502e',17),woodTop=mat('#ae8950',12,false,true),leaves=mat('#45743b',30),sand=mat('#d7c47b',14),planks=mat('#bb8a50',15),tableTop=mat('#a87543',14),bedrock=mat('#454846',25),portal=mat('#783dd0',24),rift=mat('#45c8c8',25),berries=mat('#c64347',22);
+      leaves.transparent=true;leaves.opacity=.94;leaves.depthWrite=false;
+      const water=new THREE.MeshLambertMaterial({map:makeTexture('#4785c7',12),transparent:true,opacity:.62,depthWrite:false});
+      const glass=new THREE.MeshLambertMaterial({map:makeTexture('#a8d7e5',9),transparent:true,opacity:.48,depthWrite:false});
       materialsByType[0]=[grassSide,grassSide,grassTop,dirt,grassSide,grassSide];
       materialsByType[1]=dirt;materialsByType[2]=stone;
       materialsByType[3]=[woodSide,woodSide,woodTop,woodTop,woodSide,woodSide];
@@ -208,6 +224,9 @@
       materialsByType[7]=[tableTop,tableTop,tableTop,woodSide,tableTop,tableTop];
       materialsByType[8]=bedrock;
       materialsByType[9]=portal;materialsByType[10]=rift;materialsByType[11]=berries;
+      materialsByType[12]=mat('#85827c',20);materialsByType[13]=water;
+      materialsByType[14]=mat('#424441',23);materialsByType[15]=mat('#9d8973',18);
+      materialsByType[16]=mat('#e8f1f2',8);materialsByType[17]=glass;
     }
     function key(x,y,z){return `${x},${y},${z}`}
     function chunkKey(cx,cz){return `${cx},${cz}`}
@@ -229,15 +248,8 @@
     function addBlock(x,y,z,type){const k=key(x,y,z);blocks.set(k,type);rememberChunkBlock(k,x,z);recordEdit(k,type)}
     function removeBlock(x,y,z){const k=key(x,y,z);blocks.delete(k);rememberChunkBlock(k,x,z);recordEdit(k,null)}
     function blockAt(x,y,z){return blocks.get(key(x,y,z))}
-    function terrainHash(x,z,salt=0) {
-      let h=Math.imul(x|0,374761393)+Math.imul(z|0,668265263)+Math.imul(salt|0,1442695041);
-      h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;
-    }
-    function surfaceHeight(x,z) {
-      const offset=dimensionId==='rift'?11.7:0;
-      const wav=Math.sin((x+offset)*.18)*1.6+Math.cos((z-offset)*.16)*1.35+Math.sin((x+z)*.09)*1.05;
-      return Math.max(2,Math.min(9,Math.floor((dimensionId==='rift'?6:4)+wav)));
-    }
+    function terrainHash(x,z,salt=0){return hash2D(worldSeed,x,z,salt)}
+    function surfaceHeight(x,z){return terrainColumn(worldSeed,x,z,dimensionId).height}
     function generateHouse(x,z,ground) {
       const width=5,depth=5;
       for(let dx=0;dx<width;dx++)for(let dz=0;dz<depth;dz++)addGeneratedBlock(x+dx,ground+1,z+dz,6);
@@ -257,22 +269,38 @@
       currentWorld.loadedChunks.add(ck);currentWorld.chunkBlocks.set(ck,new Set());
       const startX=cx*CHUNK_SIZE,startZ=cz*CHUNK_SIZE;
       const village=dimensionId==='overworld'&&((cx===0&&cz===0)||terrainHash(cx,cz,73)%19===0);
-      const salt=dimensionId==='rift'?227:31;
       for(let lx=0;lx<CHUNK_SIZE;lx++)for(let lz=0;lz<CHUNK_SIZE;lz++){
         const x=startX+lx,z=startZ+lz;
-        let h=surfaceHeight(x,z);
-        if(village&&lx>=2&&lx<=14&&lz>=2&&lz<=14)h=4;
+        const column=terrainColumn(worldSeed,x,z,dimensionId);
+        let h=column.height;
+        const villageGround=village&&lx<=14&&lz<=14;
+        if(villageGround)h=4;
+        else if(column.river)h=Math.min(h,SEA_LEVEL-1);
+        const biome=villageGround?'plains':column.biome;
         addGeneratedBlock(x,0,z,8);
-        for(let y=1;y<h;y++)addGeneratedBlock(x,y,z,y===1?2:1);
-        addGeneratedBlock(x,h,z,dimensionId==='rift'?(terrainHash(x,z,salt)%5===0?10:2):(h<=2?5:0));
-        if(dimensionId==='overworld'&&!village&&terrainHash(x,z,55)%181===0)addGeneratedBlock(x,h+1,z,11);
+        for(let y=1;y<h;y++){
+          if(dimensionId==='overworld'&&isCave(worldSeed,x,y,z,h))continue;
+          const ore=dimensionId==='overworld'&&y<h-2?oreAt(worldSeed,x,y,z):null;
+          const deep=y<h-3;
+          addGeneratedBlock(x,y,z,ore??(y===1||deep?2:column.soil));
+        }
+        let surface=dimensionId==='rift'?(terrainHash(x,z,227)%5===0?10:2):column.surface;
+        if(biome==='coast'&&terrainHash(x,z,61)%9===0)surface=12;
+        addGeneratedBlock(x,h,z,villageGround?0:surface);
+        if(dimensionId==='overworld'&&column.water&&!villageGround){
+          for(let y=h+1;y<=SEA_LEVEL;y++)addGeneratedBlock(x,y,z,13);
+        }
+        if(dimensionId==='overworld'&&!village&&['forest','plains','tundra'].includes(biome)&&terrainHash(x,z,55)%181===0)addGeneratedBlock(x,h+1,z,11);
       }
       if(dimensionId==='overworld'){
         for(let lx=3;lx<CHUNK_SIZE-3;lx+=5)for(let lz=3;lz<CHUNK_SIZE-3;lz+=5){
-          if(village&&lx>=2&&lx<=14&&lz>=2&&lz<=14)continue;
+          if(village&&lx<=14&&lz<=14)continue;
           const tx=startX+lx,tz=startZ+lz;
-          if(terrainHash(tx,tz,salt)%100>31)continue;
-          const ground=surfaceHeight(tx,tz),height=3+terrainHash(tx,tz,12)%2;
+          const column=terrainColumn(worldSeed,tx,tz,dimensionId);
+          if(!['forest','plains','tundra'].includes(column.biome)||column.water)continue;
+          const chance=column.biome==='forest'?46:column.biome==='tundra'?12:18;
+          if(terrainHash(tx,tz,31)%100>chance)continue;
+          const ground=column.height,height=3+terrainHash(tx,tz,12)%2;
           for(let y=ground+1;y<=ground+height;y++)addGeneratedBlock(tx,y,tz,3);
           for(let dy=-1;dy<=1;dy++)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
             if(Math.abs(dx)+Math.abs(dz)+(dy===1?1:0)>4)continue;
@@ -288,10 +316,10 @@
       } else {
         for(let lx=4;lx<CHUNK_SIZE-3;lx+=6)for(let lz=4;lz<CHUNK_SIZE-3;lz+=6){
           const x=startX+lx,z=startZ+lz;
-          if(terrainHash(x,z,salt)%100<33){const h=surfaceHeight(x,z);for(let y=h+1;y<=h+2+(terrainHash(z,x)%3);y++)addGeneratedBlock(x,y,z,10)}
+          if(terrainHash(x,z,227)%100<33){const h=surfaceHeight(x,z);for(let y=h+1;y<=h+2+(terrainHash(z,x)%3);y++)addGeneratedBlock(x,y,z,10)}
         }
       }
-      if(cx===0&&cz===0)addGeneratedBlock(4,surfaceHeight(4,0)+1,0,9);
+      if(cx===0&&cz===0)addGeneratedBlock(4,dimensionId==='overworld'?5:surfaceHeight(4,0)+1,0,9);
       for(const [k,type] of currentWorld.editsByChunk.get(ck)||[]){
         const [x,y,z]=k.split(',').map(Number);rememberChunkBlock(k,x,z);
         if(type===null)blocks.delete(k);else blocks.set(k,type);
@@ -313,12 +341,15 @@
       }
       return changed;
     }
-    function generateWorld() {
+    function generateWorld(seed=makeWorldSeed()) {
       for(const state of Object.values(worldStates)){
         state.blocks.clear();state.edits.clear();state.editsByChunk.clear();state.chunkBlocks.clear();state.loadedChunks.clear();
       }
+      worldSeed=String(seed||makeWorldSeed());
+      for(const id of Object.keys(inventory))delete inventory[id];
+      Object.assign(inventory,defaultInventory);hotbarTypes.splice(0,hotbarTypes.length,...defaultHotbar);selected=0;
       dimensionId='overworld';currentWorld=worldStates.overworld;blocks=currentWorld.blocks;editedBlocks=currentWorld.edits;lastStreamChunk='';
-      player.x=.5;player.z=.5;player.y=surfaceHeight(0,0)+1;player.velocityY=0;player.yaw=0;player.pitch=0;
+      player.x=.5;player.z=.5;player.y=5;player.velocityY=0;player.yaw=0;player.pitch=0;
       health=20;hunger=20;worldClock=36;dayNumber=1;survivalTimer=0;healthRegenTimer=0;starveTimer=0;monsterSpawnTimer=0;ensureChunksAroundPlayer(true);
     }
     function clearMeshes() {
