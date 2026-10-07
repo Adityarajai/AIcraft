@@ -45,7 +45,12 @@
     .card p { color:#d4d7ce; font-size:14px; line-height:1.55; margin:15px auto 19px; max-width:380px }
     .menu-btn { width:min(330px,100%); min-height:44px; margin:5px auto; display:block; border:2px solid #d9d9d2; outline:2px solid #090c08; border-radius:2px; background:#526b43; font-size:15px; font-weight:700; text-shadow:0 1px #253020 }
     .menu-btn:hover { background:#688755; filter:brightness(1.12) }
+    .menu-btn:disabled { opacity:.72; cursor:wait; filter:none }
     .menu-btn.secondary { background:#42483d }.menu-btn.secondary:hover { background:#5a6152 }
+    .is-hidden { display:none !important }
+    .seed-field { display:flex; align-items:center; justify-content:center; gap:10px; margin:14px auto 8px; color:#d4dccd; font:10px monospace; letter-spacing:.08em }
+    .seed-field input { width:min(220px,60%); min-height:36px; padding:7px 9px; border:1px solid #ffffff66; border-radius:2px; background:#090d09cc; color:#f3f3ee; font:12px monospace; user-select:text }
+    .seed-field input:focus { outline:2px solid #88c76a }
     .fine { margin-top:16px; color:#aab2a2; font:10px/1.5 monospace }
     .inventory-card { width:min(620px,100%); text-align:left; max-height:calc(100dvh - 24px); overflow:auto }
     .inventory-card h2 { margin:0 0 15px; font-size:22px }
@@ -107,7 +112,9 @@
     <div class="card">
       <h1>AIcraft</h1><div class="sub">A SINGLEPLAYER BLOCK-BUILDING WORLD</div>
       <p>Explore an infinite voxel world, gather blocks, craft, and build a village. Survive hungry nights, then find a portal to the Rift. Your world is saved on this device.</p>
+       <label class="seed-field" id="seedField">WORLD SEED <input id="worldSeedInput" maxlength="64" autocomplete="off" placeholder="blank for a random seed"></label>
       <button class="menu-btn" id="startButton">Create New World</button>
+       <button class="menu-btn secondary is-hidden" id="newWorldButton">Create a Different World</button>
       <div class="fine">Original AIcraft textures and code. Not affiliated with Mojang or Microsoft.<br>Use the fullscreen button for an immersive view.</div>
     </div>
   </section>
@@ -136,7 +143,9 @@
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
     import { hash2D, terrainColumn, isCave, oreAt, makeWorldSeed, SEA_LEVEL } from './src/world/terrain.js';
+    import { meshChunk } from './src/world/greedyMesher.js';
     import { IndexedDBWorldStore } from './src/storage/IndexedDBWorldStore.js';
+    import { blockDefinitions as definitions, blockRegistry } from './src/blocks/registry.js';
 
     const canvas=document.querySelector('#game');
     const toastEl=document.querySelector('#toast');
@@ -144,31 +153,14 @@
     const pauseScreen=document.querySelector('#pauseScreen');
     const inventoryScreen=document.querySelector('#inventoryScreen');
     const inventoryButton=document.querySelector('#inventoryButton');
+    const startButton=document.querySelector('#startButton');
+    const newWorldButton=document.querySelector('#newWorldButton');
+    const worldSeedInput=document.querySelector('#worldSeedInput');
+    const seedField=document.querySelector('#seedField');
     const mobileMode=matchMedia('(pointer: coarse)').matches || innerWidth<700;
     const SAVE_KEY='aicraft_singleplayer_world_v1';
     const worldStore=new IndexedDBWorldStore();
     const CHUNK_SIZE=16, CHUNK_RADIUS=1, REACH=5.5, PLAYER_HEIGHT=1.8, PLAYER_RADIUS=.29;
-    const definitions=[
-      {id:0,name:'Grass',color:'#6d9c43',side:'#79563b',drop:1,hardness:.6,blastResistance:3,requiredTool:'shovel',sound:'grass',collision:true,transparent:false,emission:0},
-      {id:1,name:'Dirt',color:'#79563b',drop:1,hardness:.5,blastResistance:2.5,requiredTool:'shovel',sound:'dirt',collision:true,transparent:false,emission:0},
-      {id:2,name:'Stone',color:'#858780',drop:2,hardness:1.5,blastResistance:6,requiredTool:'pickaxe',sound:'stone',collision:true,transparent:false,emission:0},
-      {id:3,name:'Oak log',color:'#76502e',top:'#ae8950',drop:3,hardness:2,blastResistance:3,requiredTool:'axe',sound:'wood',collision:true,transparent:false,emission:0},
-      {id:4,name:'Oak leaves',color:'#45743b',drop:4,hardness:.2,blastResistance:.2,requiredTool:'shears',sound:'leaves',collision:true,transparent:true,emission:0},
-      {id:5,name:'Sand',color:'#d7c47b',drop:5,hardness:.5,blastResistance:2.5,requiredTool:'shovel',sound:'sand',collision:true,transparent:false,emission:0},
-      {id:6,name:'Oak planks',color:'#bb8a50',drop:6,hardness:2,blastResistance:3,requiredTool:'axe',sound:'wood',collision:true,transparent:false,emission:0},
-      {id:7,name:'Crafting table',color:'#95643a',drop:7,hardness:2.5,blastResistance:3,requiredTool:'axe',sound:'wood',collision:true,transparent:false,emission:0},
-      {id:8,name:'Bedrock',color:'#454846',drop:null,hardness:Infinity,blastResistance:3600000,requiredTool:null,sound:'stone',collision:true,transparent:false,emission:0},
-      {id:9,name:'Rift portal',color:'#783dd0',drop:9,hardness:.3,blastResistance:1,requiredTool:null,sound:'magic',collision:false,transparent:true,emission:7},
-      {id:10,name:'Rift crystal',color:'#45c8c8',drop:10,hardness:1.5,blastResistance:4,requiredTool:'pickaxe',sound:'crystal',collision:true,transparent:false,emission:2},
-      {id:11,name:'Wild berries',color:'#c64347',drop:11,food:5,hardness:.2,blastResistance:.3,requiredTool:null,sound:'plant',collision:true,transparent:false,emission:0},
-      {id:12,name:'Gravel',color:'#85827c',drop:12,hardness:.6,blastResistance:3,requiredTool:'shovel',sound:'gravel',collision:true,transparent:false,emission:0},
-      {id:13,name:'Water',color:'#4785c7',drop:null,hardness:Infinity,blastResistance:100,requiredTool:null,sound:'water',collision:false,transparent:true,emission:0,fluid:'water'},
-      {id:14,name:'Coal ore',color:'#424441',drop:14,hardness:3,blastResistance:6,requiredTool:'pickaxe',sound:'stone',collision:true,transparent:false,emission:0},
-      {id:15,name:'Iron ore',color:'#9d8973',drop:15,hardness:3,blastResistance:6,requiredTool:'pickaxe',sound:'stone',collision:true,transparent:false,emission:0},
-      {id:16,name:'Snow',color:'#e8f1f2',drop:16,hardness:.2,blastResistance:.2,requiredTool:'shovel',sound:'snow',collision:true,transparent:false,emission:0},
-      {id:17,name:'Glass',color:'#a8d7e5',drop:17,hardness:.3,blastResistance:.3,requiredTool:null,sound:'glass',collision:true,transparent:true,emission:0}
-    ];
-    const blockRegistry=new Map(definitions.map(block=>[block.id,block]));
     const hotbarTypes=[1,0,2,3,4,5,6,7,8];
     const inventory={0:0,1:32,2:0,3:8,4:0,5:16,6:24,7:1,8:0,9:0,10:0,11:0};
     const defaultInventory={...inventory};
@@ -180,14 +172,13 @@
     let selected=0, started=false, paused=false, inventoryOpen=false, pointerLocked=false;
     let toastTimer=0, lastTime=0, elapsed=0, target=null, targetNormal=null, saveTimer=0;
     let worldClock=36,health=20,hunger=20,survivalTimer=0,healthRegenTimer=0,starveTimer=0,monsterSpawnTimer=0,dayNumber=1,hudTimer=0;
-    let worldSeed='aicraft-preview',hasSavedWorld=false;
+    let worldSeed='aicraft-preview',hasSavedWorld=false,worldGenVersion=2,worldReady=false;
     let monsters=[],hemiLight=null,sunLight=null,skyFactor=1;
     let joystickVector={x:0,y:0}, joyPointer=null, lookPointer=null, lastTouch={x:0,y:0};
-    let blocks=currentWorld.blocks, meshes=[], renderer, scene, camera, raycaster, outline;
+    let blocks=currentWorld.blocks, meshes=[], chunkMeshes=new Map(), renderer, scene, camera, raycaster, outline;
     let fallback2D=false, fallbackCtx=null, fallbackPatterns=[],fallbackSorted=[];
     const player={x:.5,y:4,z:.5,velocityY:0,grounded:false,yaw:0,pitch:0};
     const materialsByType=[];
-    const boxGeometry=new THREE.BoxGeometry(1,1,1);
     const skyDayOverworld=new THREE.Color('#9bc9e5'),skyNightOverworld=new THREE.Color('#11172d');
     const skyDayRift=new THREE.Color('#b493da'),skyNightRift=new THREE.Color('#180f32');
     const groundDayOverworld=new THREE.Color('#79a568'),groundNightOverworld=new THREE.Color('#17202b');
@@ -207,7 +198,7 @@
       if(grassSide){g.fillStyle='#629b46';g.fillRect(0,0,16,4);for(let i=0;i<16;i++)if(rand()>.44){g.fillStyle=rand()>.5?'#74aa50':'#4b813c';g.fillRect(i,3+Math.floor(rand()*3),1,1)}}
       if(woodTop){g.fillStyle='#bd975a';g.fillRect(1,1,14,14);g.fillStyle='#916a3b';g.fillRect(3,3,10,10);g.fillStyle='#c3a069';g.fillRect(5,5,6,6);g.fillStyle='#765432';g.fillRect(7,7,2,2)}
       for(let i=0;i<64;i++){const x=Math.floor(rand()*16),y=Math.floor(rand()*16);const n=Math.floor(rand()*variation);g.fillStyle=rand()>.5?`rgba(255,255,255,${n/180})`:`rgba(0,0,0,${n/125})`;g.fillRect(x,y,1+Math.floor(rand()*2),1)}
-      const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;tex.colorSpace=THREE.SRGBColorSpace;return tex;
+      const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestMipmapNearestFilter;tex.wrapS=THREE.RepeatWrapping;tex.wrapT=THREE.RepeatWrapping;tex.generateMipmaps=true;tex.anisotropy=Math.min(renderer?.capabilities?.getMaxAnisotropy?.()||1,4);tex.colorSpace=THREE.SRGBColorSpace;return tex;
     }
     function mat(color,variation=16,grassSide=false,woodTop=false) {
       return new THREE.MeshLambertMaterial({map:makeTexture(color,variation,grassSide,woodTop)});
@@ -248,8 +239,21 @@
     function addBlock(x,y,z,type){const k=key(x,y,z);blocks.set(k,type);rememberChunkBlock(k,x,z);recordEdit(k,type)}
     function removeBlock(x,y,z){const k=key(x,y,z);blocks.delete(k);rememberChunkBlock(k,x,z);recordEdit(k,null)}
     function blockAt(x,y,z){return blocks.get(key(x,y,z))}
-    function terrainHash(x,z,salt=0){return hash2D(worldSeed,x,z,salt)}
-    function surfaceHeight(x,z){return terrainColumn(worldSeed,x,z,dimensionId).height}
+    function terrainHash(x,z,salt=0){
+      if(worldGenVersion<2){
+        let h=Math.imul(x|0,374761393)+Math.imul(z|0,668265263)+Math.imul(salt|0,1442695041);
+        h=Math.imul(h^(h>>>13),1274126177);return (h^(h>>>16))>>>0;
+      }
+      return hash2D(worldSeed,x,z,salt);
+    }
+    function surfaceHeight(x,z){
+      if(worldGenVersion<2){
+        const offset=dimensionId==='rift'?11.7:0;
+        const wav=Math.sin((x+offset)*.18)*1.6+Math.cos((z-offset)*.16)*1.35+Math.sin((x+z)*.09)*1.05;
+        return Math.max(2,Math.min(9,Math.floor((dimensionId==='rift'?6:4)+wav)));
+      }
+      return terrainColumn(worldSeed,x,z,dimensionId).height;
+    }
     function generateHouse(x,z,ground) {
       const width=5,depth=5;
       for(let dx=0;dx<width;dx++)for(let dz=0;dz<depth;dz++)addGeneratedBlock(x+dx,ground+1,z+dz,6);
@@ -264,8 +268,55 @@
       for(let dx=-1;dx<=width;dx++)for(let dz=-1;dz<=depth;dz++)if(dx===-1||dz===-1||dx===width||dz===depth)addGeneratedBlock(x+dx,ground+5,z+dz,3);
       addGeneratedBlock(x+2,ground+2,z+2,7);
     }
+    function generateLegacyChunk(cx,cz) {
+      const ck=chunkKey(cx,cz);if(currentWorld.loadedChunks.has(ck))return false;
+      currentWorld.loadedChunks.add(ck);currentWorld.chunkBlocks.set(ck,new Set());
+      const startX=cx*CHUNK_SIZE,startZ=cz*CHUNK_SIZE;
+      const village=dimensionId==='overworld'&&((cx===0&&cz===0)||terrainHash(cx,cz,73)%19===0);
+      const salt=dimensionId==='rift'?227:31;
+      for(let lx=0;lx<CHUNK_SIZE;lx++)for(let lz=0;lz<CHUNK_SIZE;lz++){
+        const x=startX+lx,z=startZ+lz;
+        let h=surfaceHeight(x,z);
+        if(village&&lx>=2&&lx<=14&&lz>=2&&lz<=14)h=4;
+        addGeneratedBlock(x,0,z,8);
+        for(let y=1;y<h;y++)addGeneratedBlock(x,y,z,y===1?2:1);
+        addGeneratedBlock(x,h,z,dimensionId==='rift'?(terrainHash(x,z,salt)%5===0?10:2):(h<=2?5:0));
+        if(dimensionId==='overworld'&&!village&&terrainHash(x,z,55)%181===0)addGeneratedBlock(x,h+1,z,11);
+      }
+      if(dimensionId==='overworld'){
+        for(let lx=3;lx<CHUNK_SIZE-3;lx+=5)for(let lz=3;lz<CHUNK_SIZE-3;lz+=5){
+          if(village&&lx>=2&&lx<=14&&lz>=2&&lz<=14)continue;
+          const tx=startX+lx,tz=startZ+lz;
+          if(terrainHash(tx,tz,salt)%100>31)continue;
+          const ground=surfaceHeight(tx,tz),height=3+terrainHash(tx,tz,12)%2;
+          for(let y=ground+1;y<=ground+height;y++)addGeneratedBlock(tx,y,tz,3);
+          for(let dy=-1;dy<=1;dy++)for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
+            if(Math.abs(dx)+Math.abs(dz)+(dy===1?1:0)>4)continue;
+            const bx=tx+dx,by=ground+height+dy,bz=tz+dz;
+            if(!blockAt(bx,by,bz))addGeneratedBlock(bx,by,bz,4);
+          }
+        }
+        if(village){
+          const gx=startX+3,gz=startZ+3;
+          generateHouse(gx,gz,4);generateHouse(gx+7,gz,4);generateHouse(gx+3,gz+7,4);
+          for(let i=0;i<7;i++)addGeneratedBlock(startX+7,5,startZ+8+i,6);
+        }
+      }else{
+        for(let lx=4;lx<CHUNK_SIZE-3;lx+=6)for(let lz=4;lz<CHUNK_SIZE-3;lz+=6){
+          const x=startX+lx,z=startZ+lz;
+          if(terrainHash(x,z,salt)%100<33){const h=surfaceHeight(x,z);for(let y=h+1;y<=h+2+(terrainHash(z,x)%3);y++)addGeneratedBlock(x,y,z,10)}
+        }
+      }
+      if(cx===0&&cz===0)addGeneratedBlock(4,surfaceHeight(4,0)+1,0,9);
+      for(const [k,type] of currentWorld.editsByChunk.get(ck)||[]){
+        const [x,y,z]=k.split(',').map(Number);rememberChunkBlock(k,x,z);
+        if(type===null)blocks.delete(k);else blocks.set(k,type);
+      }
+      return true;
+    }
     function generateChunk(cx,cz) {
       const ck=chunkKey(cx,cz);if(currentWorld.loadedChunks.has(ck))return false;
+      if(worldGenVersion<2)return generateLegacyChunk(cx,cz);
       currentWorld.loadedChunks.add(ck);currentWorld.chunkBlocks.set(ck,new Set());
       const startX=cx*CHUNK_SIZE,startZ=cz*CHUNK_SIZE;
       const village=dimensionId==='overworld'&&((cx===0&&cz===0)||terrainHash(cx,cz,73)%19===0);
@@ -345,7 +396,7 @@
       for(const state of Object.values(worldStates)){
         state.blocks.clear();state.edits.clear();state.editsByChunk.clear();state.chunkBlocks.clear();state.loadedChunks.clear();
       }
-      worldSeed=String(seed||makeWorldSeed());
+      worldSeed=String(seed||makeWorldSeed());worldGenVersion=2;
       for(const id of Object.keys(inventory))delete inventory[id];
       Object.assign(inventory,defaultInventory);hotbarTypes.splice(0,hotbarTypes.length,...defaultHotbar);selected=0;
       dimensionId='overworld';currentWorld=worldStates.overworld;blocks=currentWorld.blocks;editedBlocks=currentWorld.edits;lastStreamChunk='';
@@ -354,35 +405,77 @@
     }
     function clearMeshes() {
       if(!scene)return;
-      for(const m of meshes){scene.remove(m);m.dispose?.()}
-      meshes=[];
+      for(const m of meshes){scene.remove(m);m.geometry?.dispose()}
+      meshes=[];chunkMeshes.clear();
     }
     function refreshFallbackCache() {
       fallbackSorted=[];
       for(const [k,type] of blocks){const [x,y,z]=k.split(',').map(Number);fallbackSorted.push({x,y,z,type})}
       fallbackSorted.sort((a,b)=>(a.x+a.z-b.x-b.z)||(a.y-b.y));
     }
+    function buildChunkMeshes(ck) {
+      if(!scene||!currentWorld.loadedChunks.has(ck))return;
+      const [cx,cz]=ck.split(',').map(Number);
+      let highest=32;
+      for(const k of currentWorld.chunkBlocks.get(ck)||[]){
+        if(blocks.has(k))highest=Math.max(highest,Number(k.split(',')[1]));
+      }
+      const built=[];
+      const byType=meshChunk(blocks,blockRegistry,cx,cz,CHUNK_SIZE,highest);
+      for(const [type,data] of byType){
+        const geometry=new THREE.BufferGeometry();
+        geometry.setAttribute('position',new THREE.Float32BufferAttribute(data.positions,3));
+        geometry.setAttribute('normal',new THREE.Float32BufferAttribute(data.normals,3));
+        geometry.setAttribute('uv',new THREE.Float32BufferAttribute(data.uvs,2));
+        geometry.setIndex(data.indices);
+        for(const group of data.groups)geometry.addGroup(group.start,group.count,group.materialIndex);
+        geometry.computeBoundingBox();geometry.computeBoundingSphere();
+        const material=materialsByType[type];
+        const materialSet=Array.isArray(material)?material:Array(6).fill(material);
+        const mesh=new THREE.Mesh(geometry,materialSet);
+        mesh.position.set(cx*CHUNK_SIZE,0,cz*CHUNK_SIZE);
+        mesh.userData.blockType=type;mesh.userData.chunkKey=ck;
+        mesh.frustumCulled=true;scene.add(mesh);meshes.push(mesh);built.push(mesh);
+      }
+      chunkMeshes.set(ck,built);
+    }
+    function disposeChunkMeshes(ck) {
+      for(const mesh of chunkMeshes.get(ck)||[]){
+        scene?.remove(mesh);mesh.geometry?.dispose();
+        const index=meshes.indexOf(mesh);if(index>=0)meshes.splice(index,1);
+      }
+      chunkMeshes.delete(ck);
+    }
     function rebuildWorld() {
       if(fallback2D){refreshFallbackCache();return}
       if(!scene)return;
       clearMeshes();
-      const groups=Array.from({length:definitions.length},()=>[]);
-      for(const [k,type] of blocks){const [x,y,z]=k.split(',').map(Number);groups[type].push({x,y,z,type})}
-      groups.forEach((items,type)=>{
-        if(!items.length)return;
-        const mesh=new THREE.InstancedMesh(boxGeometry,materialsByType[type],items.length);
-        const dummy=new THREE.Object3D();
-        items.forEach((b,i)=>{dummy.position.set(b.x+.5,b.y+.5,b.z+.5);dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix)});
-        mesh.instanceMatrix.needsUpdate=true;
-        mesh.userData.blockInstances=items;mesh.userData.blockType=type;
-        mesh.frustumCulled=false;
-        scene.add(mesh);meshes.push(mesh);
-      });
+      for(const ck of currentWorld.loadedChunks)buildChunkMeshes(ck);
     }
-    function restoreSave() {
+    function rebuildAffectedChunks(x,z) {
+      if(fallback2D){refreshFallbackCache();return}
+      if(!scene)return;
+      const cx=Math.floor(x/CHUNK_SIZE),cz=Math.floor(z/CHUNK_SIZE);
+      const localX=((x%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
+      const localZ=((z%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
+      const affected=new Set([chunkKey(cx,cz)]);
+      if(localX===0)affected.add(chunkKey(cx-1,cz));
+      if(localX===CHUNK_SIZE-1)affected.add(chunkKey(cx+1,cz));
+      if(localZ===0)affected.add(chunkKey(cx,cz-1));
+      if(localZ===CHUNK_SIZE-1)affected.add(chunkKey(cx,cz+1));
+      for(const ck of affected){disposeChunkMeshes(ck);buildChunkMeshes(ck)}
+    }
+    async function restoreSave() {
       try {
-        const saved=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+        let saved=null;
+        try {saved=await worldStore.load(SAVE_KEY)}catch(error){console.warn('IndexedDB read failed; checking browser backup',error)}
+        if(!saved){
+          try {saved=JSON.parse(localStorage.getItem(SAVE_KEY)||'null')}catch(error){console.warn('Saved-world backup is unreadable',error)}
+          if(saved)try{await worldStore.save(SAVE_KEY,saved)}catch(error){console.warn('Could not migrate the browser backup to IndexedDB',error)}
+        }
         if(!saved||(!saved.edits&&!Array.isArray(saved.blocks)))return false;
+        worldSeed=String(saved.seed??'legacy-aicraft-world');
+        worldGenVersion=saved.worldGenVersion===1||(!saved.worldGenVersion&&!saved.seed)?1:2;
         for(const name of Object.keys(worldStates)){
           const state=worldStates[name];state.edits.clear();state.editsByChunk.clear();state.blocks.clear();state.chunkBlocks.clear();state.loadedChunks.clear();
           const pairs=saved.edits?.[name]||(name==='overworld'?saved.blocks:null);
@@ -408,20 +501,40 @@
         return true;
       }catch(e){console.warn('Saved world could not be loaded',e);return false}
     }
-    function saveWorld() {
+    async function saveWorld(emergencyBackup=false) {
+      if(!worldReady)return false;
       try {
         const edits={};for(const [name,state] of Object.entries(worldStates))edits[name]=[...state.edits.entries()];
-        const data={edits,dimension:dimensionId,inventory,hotbar:hotbarTypes,selected,health,hunger,worldClock,dayNumber,player:{x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch}};
-        localStorage.setItem(SAVE_KEY,JSON.stringify(data));
-        document.querySelector('#saveStatus').textContent='Saved on this device';
+        const data={saveVersion:2,worldGenVersion,seed:worldSeed,edits,dimension:dimensionId,inventory:{...inventory},hotbar:[...hotbarTypes],selected,health,hunger,worldClock,dayNumber,player:{x:player.x,y:player.y,z:player.z,yaw:player.yaw,pitch:player.pitch}};
+        const serialized=JSON.stringify(data);
+        if(emergencyBackup&&serialized.length<1_800_000){
+          try{localStorage.setItem(SAVE_KEY,serialized)}catch(error){console.warn('Emergency browser backup could not be written',error)}
+        }
+        try{
+          await worldStore.save(SAVE_KEY,data);
+          document.querySelector('#saveStatus').textContent='IndexedDB · saved on this device';
+        }catch(storageError){
+          localStorage.setItem(SAVE_KEY,serialized);
+          document.querySelector('#saveStatus').textContent='Browser backup · IndexedDB unavailable';
+          console.warn('Using browser storage fallback for the world',storageError);
+        }
       }catch(e){document.querySelector('#saveStatus').textContent='Save unavailable';console.warn('Could not save world',e)}
     }
-    function initThree() {
+    function updateWorldMenu(hasSave) {
+      startButton.textContent=hasSave?'Continue World':'Create New World';
+      startButton.disabled=false;
+      seedField.classList.toggle('is-hidden',hasSave);
+      newWorldButton.classList.toggle('is-hidden',!hasSave);
+      worldSeedInput.disabled=hasSave;
+      if(hasSave)worldSeedInput.value=worldSeed;
+    }
+    async function initThree() {
+      startButton.disabled=true;startButton.textContent='Loading saved world…';worldSeedInput.disabled=true;
       let webglContext=null;
       try {webglContext=canvas.getContext('webgl2',{antialias:false,alpha:false,powerPreference:'high-performance'})}catch(e){}
-      if(!webglContext){initCanvasFallback();return}
+      if(!webglContext){await initCanvasFallback();return}
       try {renderer=new THREE.WebGLRenderer({canvas,context:webglContext,antialias:false,alpha:false,powerPreference:'high-performance'})}
-      catch(e){initCanvasFallback();return}
+      catch(e){await initCanvasFallback();return}
       renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
       renderer.setSize(innerWidth,innerHeight);
       renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -435,9 +548,11 @@
       outline=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.012,1.012,1.012)),new THREE.LineBasicMaterial({color:'#10140e',transparent:true,opacity:.93,depthTest:true}));
       outline.visible=false;outline.renderOrder=4;scene.add(outline);
       initMaterials();
-      const loaded=restoreSave();
-      if(!loaded)generateWorld();
-      document.querySelector('#startButton').textContent=loaded?'Continue World':'Create New World';
+      const loaded=await restoreSave();
+      hasSavedWorld=loaded;
+      if(!loaded)generateWorld('aicraft-preview');
+      worldReady=true;
+      updateWorldMenu(loaded);
       rebuildWorld();
       addEventListener('resize',resize);
       requestAnimationFrame(frame);
@@ -454,12 +569,15 @@
       renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight);
       camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
     }
-    function initCanvasFallback() {
+    async function initCanvasFallback() {
+      startButton.disabled=true;startButton.textContent='Loading saved world…';worldSeedInput.disabled=true;
       fallbackCtx=canvas.getContext('2d');
       if(!fallbackCtx){showError('This browser could not create a graphics canvas. Try a current version of Chrome, Firefox, Safari, or Edge.');return}
       fallback2D=true;
-      const loaded=restoreSave();if(!loaded)generateWorld();
-      document.querySelector('#startButton').textContent=loaded?'Continue World':'Create New World';
+      const loaded=await restoreSave();hasSavedWorld=loaded;
+      if(!loaded)generateWorld('aicraft-preview');
+      worldReady=true;
+      updateWorldMenu(loaded);
       makeFallbackPatterns();refreshFallbackCache();resize();addEventListener('resize',resize);
       requestAnimationFrame(frame);
       if(loaded)flash('Saved world loaded · Canvas compatibility mode');
@@ -553,7 +671,16 @@
       const minX=Math.floor(x-PLAYER_RADIUS),maxX=Math.floor(x+PLAYER_RADIUS),minZ=Math.floor(z-PLAYER_RADIUS),maxZ=Math.floor(z+PLAYER_RADIUS);
       const minY=Math.floor(y+.05),maxY=Math.floor(y+PLAYER_HEIGHT-.06);
       for(let bx=minX;bx<=maxX;bx++)for(let bz=minZ;bz<=maxZ;bz++)for(let by=minY;by<=maxY;by++){
-        const type=blockAt(bx,by,bz);if(type!==undefined&&type!==9)return true;
+        const type=blockAt(bx,by,bz);if(type!==undefined&&(blockRegistry.get(type)?.collision??true))return true;
+      }
+      return false;
+    }
+    function playerInFluid() {
+      const minX=Math.floor(player.x-PLAYER_RADIUS),maxX=Math.floor(player.x+PLAYER_RADIUS);
+      const minZ=Math.floor(player.z-PLAYER_RADIUS),maxZ=Math.floor(player.z+PLAYER_RADIUS);
+      const minY=Math.floor(player.y+.15),maxY=Math.floor(player.y+PLAYER_HEIGHT*.72);
+      for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++)for(let y=minY;y<=maxY;y++){
+        const def=blockRegistry.get(blockAt(x,y,z));if(def?.fluid)return true;
       }
       return false;
     }
@@ -563,7 +690,7 @@
       for(const [sx,sz] of samples){
         const bx=Math.floor(sx),bz=Math.floor(sz);
         for(let by=Math.floor(fromY);by>=Math.floor(toY)-1;by--){
-          const type=blockAt(bx,by,bz);if(type===undefined||type===9)continue;
+          const type=blockAt(bx,by,bz);if(type===undefined||!(blockRegistry.get(type)?.collision??true))continue;
           const top=by+1;
           if(top<=fromY+.055&&top>=toY-.055&&(floor===null||top>floor))floor=top;
         }
@@ -582,16 +709,18 @@
     }
     function updatePlayer(dt) {
       if(!started||paused||inventoryOpen)return;
+      const inFluid=playerInFluid();
       let forward=(keys.w?1:0)-(keys.s?1:0)-joystickVector.y;
       // The camera faces +Z at yaw 0; its screen-right axis is -X.
       let strafe=(keys.a?1:0)-(keys.d?1:0)-joystickVector.x;
       const length=Math.hypot(forward,strafe);
       if(length>1){forward/=length;strafe/=length}
-      const speed=keys.shift?6.4:4.8;
+      const speed=(keys.shift?6.4:4.8)*(inFluid?.58:1);
       const dx=(Math.sin(player.yaw)*forward+Math.cos(player.yaw)*strafe)*speed*dt;
       const dz=(Math.cos(player.yaw)*forward-Math.sin(player.yaw)*strafe)*speed*dt;
       moveHorizontal(dx,0);moveHorizontal(0,dz);
-      player.velocityY-=22*dt;
+      player.velocityY-=(inFluid?4.2:22)*dt;
+      if(inFluid)player.velocityY*=Math.pow(.94,dt*60);
       const nextY=player.y+player.velocityY*dt;
       if(player.velocityY<=0){
         const floor=groundSurfaceBetween(player.x,player.z,player.y,nextY);
@@ -622,7 +751,7 @@
     }
     function groundAt(x,z) {
       const bx=Math.floor(x),bz=Math.floor(z);
-      for(let y=48;y>=-2;y--){const type=blockAt(bx,y,bz);if(type!==undefined&&type!==9)return y+1}
+      for(let y=48;y>=-2;y--){const type=blockAt(bx,y,bz);if(type!==undefined&&(blockRegistry.get(type)?.collision??true))return y+1}
       return null;
     }
     function spawnMonster() {
@@ -717,11 +846,14 @@
       camera.rotation.order='YXZ';camera.rotation.y=player.yaw+Math.PI;camera.rotation.x=player.pitch;
       raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
       const hits=raycaster.intersectObjects(meshes,false);
-      const hit=hits.find(h=>h.distance<=REACH&&h.instanceId!==undefined);
+      const hit=hits.find(h=>h.distance<=REACH&&h.face);
       if(!hit){target=null;targetNormal=null;outline.visible=false;return}
-      const block=hit.object.userData.blockInstances[hit.instanceId];
-      if(!block){target=null;outline.visible=false;return}
-      target={...block,distance:hit.distance};targetNormal=hit.face.normal.clone();
+      const normal=hit.face.normal.clone().normalize();
+      const point=hit.point.clone().sub(normal.clone().multiplyScalar(.002));
+      const block={x:Math.floor(point.x),y:Math.floor(point.y),z:Math.floor(point.z)};
+      block.type=blockAt(block.x,block.y,block.z);
+      if(block.type===undefined){target=null;targetNormal=null;outline.visible=false;return}
+      target={...block,distance:hit.distance};targetNormal=normal;
       outline.position.set(block.x+.5,block.y+.5,block.z+.5);outline.visible=true;
     }
     function updateHud() {
@@ -770,10 +902,11 @@
       if(attackMonster())return;
       if(!target){flash('Nothing to mine');return}
       if(target.type===8){flash('Bedrock cannot be mined');return}
-      const k=key(target.x,target.y,target.z),type=target.type;
-      removeBlock(target.x,target.y,target.z);
+      const {x,y,z,type}=target;
+      removeBlock(x,y,z);
       const drop=definitions[type].drop;if(drop!==null)inventory[drop]=(inventory[drop]||0)+1;
-      rebuildWorld();target=null;if(outline)outline.visible=false;
+      rebuildAffectedChunks(x,z);target=null;if(outline)outline.visible=false;
+      saveWorld();
       flash(`${definitions[type].name} mined`);
     }
     function placeBlock() {
@@ -792,7 +925,7 @@
       if(y<1||blockAt(x,y,z)!==undefined){flash('There is no room to place a block');return}
       const playerOccupies=x>=Math.floor(player.x-PLAYER_RADIUS)&&x<=Math.floor(player.x+PLAYER_RADIUS)&&z>=Math.floor(player.z-PLAYER_RADIUS)&&z<=Math.floor(player.z+PLAYER_RADIUS)&&y<player.y+PLAYER_HEIGHT&&y+1>player.y;
       if(playerOccupies){flash('You cannot place a block inside yourself');return}
-      addBlock(x,y,z,type);inventory[type]=count-1;rebuildWorld();flash(`${definitions[type].name} placed`);
+      addBlock(x,y,z,type);inventory[type]=count-1;rebuildAffectedChunks(x,z);saveWorld();flash(`${definitions[type].name} placed`);
     }
     function createHotbar() {
       const bar=document.querySelector('#hotbar');bar.innerHTML='';
@@ -809,8 +942,14 @@
     }
     function closeInventory() {
       inventoryOpen=false;inventoryScreen.classList.add('hidden');
-      if(started&&!mobileMode)canvas.requestPointerLock?.();
+      if(started&&!mobileMode)requestPointerLock();
       saveWorld();
+    }
+    function requestPointerLock() {
+      try{
+        const request=canvas.requestPointerLock?.();
+        if(request&&typeof request.catch==='function')request.catch(()=>flash('Mouse capture unavailable · click the game to retry'));
+      }catch{flash('Mouse capture unavailable · click the game to retry')}
     }
     function renderInventory() {
       const grid=document.querySelector('#itemGrid'),recipes=document.querySelector('#recipes');grid.innerHTML='';recipes.innerHTML='';
@@ -840,9 +979,24 @@
       document.querySelector('#selectedItemName').textContent=definitions[hotbarTypes[selected]].name;
     }
     function startGame() {
+      if(!worldReady){flash('World is still loading · please wait');return}
+      if(!hasSavedWorld){
+        generateWorld(worldSeedInput.value.trim()||makeWorldSeed());
+        hasSavedWorld=true;updateWorldMenu(true);rebuildWorld();updateHud();
+      }
       started=true;paused=false;startScreen.classList.add('hidden');pauseScreen.classList.add('hidden');
-      if(!mobileMode)canvas.requestPointerLock?.();
+      if(!mobileMode)requestPointerLock();
       saveWorld();
+    }
+    function prepareNewWorld() {
+      if(!worldReady)return;
+      if(hasSavedWorld&&!confirm('Creating a new world will replace the single saved world after you start it. Continue?'))return;
+      hasSavedWorld=false;worldSeedInput.value='';updateWorldMenu(false);worldSeedInput.focus();
+    }
+    function jumpPlayer() {
+      if(!started||paused||inventoryOpen)return;
+      if(playerInFluid()){player.velocityY=5.2;player.grounded=false;return}
+      if(player.grounded){player.velocityY=8.2;player.grounded=false}
     }
     function pauseGame() {
       if(!started||inventoryOpen)return;
@@ -850,12 +1004,13 @@
     }
     function resumeGame() {
       paused=false;pauseScreen.classList.add('hidden');
-      if(!mobileMode)canvas.requestPointerLock?.();
+      if(!mobileMode)requestPointerLock();
     }
     function startOrResume() {if(!started)startGame();else resumeGame()}
 
     createHotbar();
-    document.querySelector('#startButton').addEventListener('click',startGame);
+    startButton.addEventListener('click',startGame);
+    newWorldButton.addEventListener('click',prepareNewWorld);
     document.querySelector('#resumeButton').addEventListener('click',resumeGame);
     document.querySelector('#pauseInventoryButton').addEventListener('click',()=>{pauseScreen.classList.add('hidden');paused=false;openInventory()});
     document.querySelector('#saveQuitButton').addEventListener('click',()=>{saveWorld();paused=false;started=false;pauseScreen.classList.add('hidden');startScreen.classList.remove('hidden');if(pointerLocked)document.exitPointerLock()});
@@ -870,7 +1025,7 @@
       pointerLocked=document.pointerLockElement===canvas;
       if(started&&!pointerLocked&&!mobileMode&&!inventoryOpen&&!paused)pauseGame();
     });
-    canvas.addEventListener('click',()=>{if(started&&!mobileMode&&!paused&&!inventoryOpen&&!pointerLocked)canvas.requestPointerLock?.()});
+    canvas.addEventListener('click',()=>{if(started&&!mobileMode&&!paused&&!inventoryOpen&&!pointerLocked)requestPointerLock()});
     addEventListener('mousemove',e=>{if(pointerLocked&&started&&!paused){player.yaw-=e.movementX*.0018;player.pitch=Math.max(-1.48,Math.min(1.48,player.pitch-e.movementY*.0018))}});
     addEventListener('keydown',e=>{
       const k=e.key.toLowerCase();
@@ -878,17 +1033,16 @@
       if(k==='escape'){if(inventoryOpen){closeInventory();return}if(paused){resumeGame();return}}
       if(k==='e'){if(inventoryOpen)closeInventory();else openInventory();return}
       if(k>='1'&&k<='9')selectSlot(Number(k)-1);
-      if(k===' ')keys.jump=true;
+      if(k===' '){keys.jump=true;if(!e.repeat)jumpPlayer()}
       if(k==='shift')keys.shift=true;
       if(k==='w'||k==='a'||k==='s'||k==='d')keys[k]=true;
     },{passive:false});
     addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k===' ')keys.jump=false;if(k==='shift')keys.shift=false;if(k in keys)keys[k]=false});
-    addEventListener('keydown',e=>{if(e.code==='Space'&&started&&!paused&&!inventoryOpen&&player.grounded){player.velocityY=8.2;player.grounded=false}});
     canvas.addEventListener('mousedown',e=>{if(!started||paused||inventoryOpen)return;if(!pointerLocked&&!mobileMode)return;if(e.button===0)mineBlock();else if(e.button===2)placeBlock()});
     canvas.addEventListener('contextmenu',e=>e.preventDefault());
     document.querySelector('#mineButton').addEventListener('pointerdown',e=>{e.preventDefault();mineBlock()});
     document.querySelector('#placeButton').addEventListener('pointerdown',e=>{e.preventDefault();placeBlock()});
-    document.querySelector('#jumpButton').addEventListener('pointerdown',e=>{e.preventDefault();if(player.grounded&&started&&!paused){player.velocityY=8.2;player.grounded=false}});
+    document.querySelector('#jumpButton').addEventListener('pointerdown',e=>{e.preventDefault();jumpPlayer()});
     const joy=document.querySelector('#joystick'),knob=document.querySelector('#joyKnob');
     joy.addEventListener('pointerdown',e=>{e.preventDefault();joyPointer=e.pointerId;joy.setPointerCapture(e.pointerId);updateJoy(e)});
     joy.addEventListener('pointermove',e=>{if(e.pointerId===joyPointer)updateJoy(e)});
@@ -899,9 +1053,9 @@
     canvas.addEventListener('pointermove',e=>{if(e.pointerId===lookPointer){const dx=e.clientX-lastTouch.x,dy=e.clientY-lastTouch.y;lastTouch={x:e.clientX,y:e.clientY};player.yaw-=dx*.0032;player.pitch=Math.max(-1.48,Math.min(1.48,player.pitch-dy*.0032))}});
     canvas.addEventListener('pointerup',e=>{if(e.pointerId===lookPointer)lookPointer=null});
     canvas.addEventListener('pointercancel',e=>{if(e.pointerId===lookPointer)lookPointer=null});
-    addEventListener('beforeunload',saveWorld);
-    document.addEventListener('visibilitychange',()=>{if(document.hidden)saveWorld()});
-    initThree();
+    addEventListener('beforeunload',()=>{void saveWorld(true)});
+    document.addEventListener('visibilitychange',()=>{if(document.hidden&&worldReady)void saveWorld(true)});
+    initThree().catch(error=>showError(`AIcraft could not load: ${error.message}`));
   </script>
 </body>
 </html>
